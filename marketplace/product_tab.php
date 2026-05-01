@@ -11,17 +11,29 @@
 // Global context is already loaded by Dolibarr
 global $db, $user, $langs, $conf, $object;
 
+// Load required classes if not already loaded
+if (!class_exists('Product')) {
+    require_once DOL_DOCUMENT_ROOT . '/products/class/product.class.php';
+}
+
 // Get product ID
 $product_id = isset($object->id) ? $object->id : (isset($_GET['id']) ? intval($_GET['id']) : 0);
 
 if (!$product_id) {
+    echo '<!-- DEBUG: No product ID -->';
     return;
 }
 
 // Load product if not already loaded
-if (!isset($object) || $object->id != $product_id) {
-    $product = new Product($db);
-    if ($product->fetch($product_id) <= 0) {
+if (!isset($object) || !is_object($object) || $object->id != $product_id) {
+    try {
+        $product = new Product($db);
+        if ($product->fetch($product_id) <= 0) {
+            echo '<!-- DEBUG: Product not found -->';
+            return;
+        }
+    } catch (Exception $e) {
+        echo '<!-- DEBUG: Product fetch error: ' . htmlspecialchars($e->getMessage()) . ' -->';
         return;
     }
 } else {
@@ -30,6 +42,7 @@ if (!isset($object) || $object->id != $product_id) {
 
 // Check permission
 if (!$user->hasRight('marketplace_bdc', 'marketplace', 'read')) {
+    echo '<!-- DEBUG: Permission denied -->';
     return;
 }
 
