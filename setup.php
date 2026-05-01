@@ -380,6 +380,14 @@ function sanitizeString($str) {
         <p class="subtitle">Manage your marketplace integrations and settings</p>
     </header>
     
+    <!-- Version Badge -->
+    <?php
+    $badge_file = __DIR__ . '/version_badge.html';
+    if (file_exists($badge_file)) {
+        include $badge_file;
+    }
+    ?>
+    
     <?php if (isset($success_message)): ?>
         <div class="alert alert-success">
             ✓ <?php echo $success_message; ?>
