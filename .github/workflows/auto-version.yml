@@ -1,0 +1,222 @@
+name: Auto-Versioning & Release
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'class/**'
+      - 'marketplace/**'
+      - 'admin/**'
+      - 'sql/**'
+      - 'core/**'
+      - '!README.md'
+      - '!CHANGELOG.md'
+    # Ignore version management changes to avoid loops
+    ignore-paths:
+      - 'CHANGELOG.md'
+      - 'class/VersionManager.class.php'
+
+jobs:
+  detect-version-bump:
+    runs-on: ubuntu-latest
+    name: Detect Version Bump from Commit Message
+    outputs:
+      new_version: ${{ steps.version.outputs.new_version }}
+      bump_type: ${{ steps.version.outputs.bump_type }}
+      should_release: ${{ steps.version.outputs.should_release }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+
+      - name: Parse commit message for version bump
+        id: version
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          CURRENT_VERSION=$(grep "const VERSION = " class/VersionManager.class.php | sed "s/.*const VERSION = '\([^']*\)'.*/\1/")
+          
+          echo "Commit message: $COMMIT_MSG"
+          echo "Current version: $CURRENT_VERSION"
+          
+          # Check for version bump keywords
+          if [[ "$COMMIT_MSG" =~ "Release v" ]] || [[ "$COMMIT_MSG" =~ "bump: major" ]]; then
+            BUMP_TYPE="major"
+          elif [[ "$COMMIT_MSG" =~ "Feature" ]] || [[ "$COMMIT_MSG" =~ "Feat:" ]] || [[ "$COMMIT_MSG" =~ "bump: minor" ]]; then
+            BUMP_TYPE="minor"
+          elif [[ "$COMMIT_MSG" =~ "Fix:" ]] || [[ "$COMMIT_MSG" =~ "Hotfix" ]] || [[ "$COMMIT_MSG" =~ "bump: patch" ]]; then
+            BUMP_TYPE="patch"
+          else
+            BUMP_TYPE="none"
+          fi
+          
+          echo "Bump type detected: $BUMP_TYPE"
+          
+          # Parse current version
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          
+          # Calculate new version
+          if [ "$BUMP_TYPE" = "major" ]; then
+            NEW_VERSION="$((MAJOR + 1)).0.0"
+          elif [ "$BUMP_TYPE" = "minor" ]; then
+            NEW_VERSION="$MAJOR.$((MINOR + 1)).0"
+          elif [ "$BUMP_TYPE" = "patch" ]; then
+            NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+          else
+            NEW_VERSION="$CURRENT_VERSION"
+          fi
+          
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          
+          if [ "$BUMP_TYPE" != "none" ]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "✅ Version calculation complete"
+          echo "  New version: $NEW_VERSION"
+          echo "  Should release: $([[ "$BUMP_TYPE" != "none" ]] && echo 'yes' || echo 'no')"
+
+  update-version:
+    runs-on: ubuntu-latest
+    needs: detect-version-bump
+    if: needs.detect-version-bump.outputs.should_release == 'true'
+    name: Update Version Files
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Update VersionManager.class.php
+        run: |
+          NEW_VERSION="${{ needs.detect-version-bump.outputs.new_version }}"
+          DATE=$(date '+%Y-%m-%d')
+          
+          echo "Updating version to $NEW_VERSION"
+          
+          # Update VersionManager class
+          sed -i "s/const VERSION = '[^']*'/const VERSION = '$NEW_VERSION'/" class/VersionManager.class.php
+          sed -i "s/const VERSION_DATE = '[^']*'/const VERSION_DATE = '$DATE'/" class/VersionManager.class.php
+          
+          cat class/VersionManager.class.php | grep "const VERSION"
+
+      - name: Update README.md
+        run: |
+          NEW_VERSION="${{ needs.detect-version-bump.outputs.new_version }}"
+          sed -i "s/\*\*Version [^*]*\*\*/\*\*Version $NEW_VERSION\*\*/" README.md
+          echo "✅ README.md updated"
+
+      - name: Update CHANGELOG.md
+        run: |
+          NEW_VERSION="${{ needs.detect-version-bump.outputs.new_version }}"
+          DATE=$(date '+%Y-%m-%d')
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          
+          # Create new changelog entry
+          {
+            echo "## [$NEW_VERSION] - $DATE"
+            echo ""
+            echo "### Changes"
+            echo "- $COMMIT_MSG"
+            echo ""
+            cat CHANGELOG.md
+          } > CHANGELOG.md.tmp
+          
+          mv CHANGELOG.md.tmp CHANGELOG.md
+          echo "✅ CHANGELOG.md updated"
+
+      - name: Commit version updates
+        run: |
+          NEW_VERSION="${{ needs.detect-version-bump.outputs.new_version }}"
+          git add class/VersionManager.class.php README.md CHANGELOG.md
+          git commit -m "chore: bump version to $NEW_VERSION" || echo "No changes to commit"
+          git log -1 --oneline
+
+      - name: Push version commit
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: main
+
+  create-release:
+    runs-on: ubuntu-latest
+    needs: [detect-version-bump, update-version]
+    if: needs.detect-version-bump.outputs.should_release == 'true'
+    name: Create GitHub Release & Tag
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Create Git Tag
+        run: |
+          NEW_VERSION="${{ needs.detect-version-bump.outputs.new_version }}"
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          git tag -a "v$NEW_VERSION" -m "Release version $NEW_VERSION" || echo "Tag already exists"
+          git push origin "v$NEW_VERSION" || echo "Tag push failed"
+
+      - name: Create Release Notes
+        id: release_notes
+        run: |
+          NEW_VERSION="${{ needs.detect-version-bump.outputs.new_version }}"
+          DATE=$(date '+%Y-%m-%d')
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          
+          echo "release_body<<EOF" >> $GITHUB_OUTPUT
+          echo "## Version $NEW_VERSION ($DATE)" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "### Release Notes" >> $GITHUB_OUTPUT
+          echo "$COMMIT_MSG" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "### Files Changed" >> $GITHUB_OUTPUT
+          git diff --name-only HEAD~1 HEAD | sed 's/^/- /' >> $GITHUB_OUTPUT || echo "- N/A" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.detect-version-bump.outputs.new_version }}
+          body: ${{ steps.release_notes.outputs.release_body }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-success:
+    runs-on: ubuntu-latest
+    needs: [detect-version-bump, create-release]
+    if: always()
+    steps:
+      - name: Version bump summary
+        run: |
+          echo "✅ Auto-Versioning Workflow Complete"
+          echo ""
+          echo "Summary:"
+          echo "  Bump Type: ${{ needs.detect-version-bump.outputs.bump_type }}"
+          echo "  New Version: ${{ needs.detect-version-bump.outputs.new_version }}"
+          echo "  Release Created: ${{ needs.detect-version-bump.outputs.should_release }}"
+          echo ""
+          echo "✅ Release: v${{ needs.detect-version-bump.outputs.new_version }}"
+          echo "📦 Available on GitHub Releases"

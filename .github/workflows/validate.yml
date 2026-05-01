@@ -1,0 +1,202 @@
+name: Module Tests & Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  validate-module:
+    runs-on: ubuntu-latest
+    name: Validate Module Structure
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: pdo, mysql
+
+      - name: Check required files
+        run: |
+          echo "🔍 Checking required files..."
+          
+          REQUIRED_FILES=(
+            "core/modules/modMarketPlace_BDC.class.php"
+            "class/VersionManager.class.php"
+            "marketplace/product_tab.php"
+            "admin/setup.php"
+            "admin/advanced_config.php"
+            "README.md"
+            "CHANGELOG.md"
+          )
+          
+          for file in "${REQUIRED_FILES[@]}"; do
+            if [ -f "$file" ]; then
+              echo "✅ $file"
+            else
+              echo "❌ MISSING: $file"
+              exit 1
+            fi
+          done
+          
+          echo "✅ All required files present"
+
+      - name: Validate PHP files
+        run: |
+          echo "🔍 Validating PHP files..."
+          
+          find . -name "*.php" -type f ! -path "./.git/*" ! -path "./node_modules/*" | while read file; do
+            if ! php -l "$file" > /dev/null 2>&1; then
+              echo "❌ Syntax error in: $file"
+              php -l "$file"
+              exit 1
+            fi
+          done
+          
+          echo "✅ All PHP files valid"
+
+      - name: Check SQL files
+        run: |
+          echo "🔍 Validating SQL files..."
+          
+          if [ -d "sql" ]; then
+            find sql -name "*.sql" -type f | while read file; do
+              if [ -s "$file" ]; then
+                echo "✅ $file ($(wc -l < "$file") lines)"
+              else
+                echo "⚠️  Empty SQL file: $file"
+              fi
+            done
+          fi
+
+      - name: Validate JSON configurations
+        run: |
+          echo "🔍 Validating JSON configs..."
+          
+          if [ -d "modules/configs" ]; then
+            find modules/configs -name "*.json" -type f | while read file; do
+              if php -r "json_decode(file_get_contents('$file'), true); if (json_last_error() !== JSON_ERROR_NONE) exit(1);" 2>/dev/null; then
+                echo "✅ $file"
+              else
+                echo "❌ Invalid JSON: $file"
+                exit 1
+              fi
+            done
+          fi
+
+      - name: Check file permissions
+        run: |
+          echo "🔍 Checking file permissions..."
+          
+          # Check for scripts
+          if [ -f "update_version.sh" ]; then
+            if [ -x "update_version.sh" ]; then
+              echo "✅ update_version.sh is executable"
+            else
+              echo "⚠️  update_version.sh is not executable"
+            fi
+          fi
+          
+          if [ -f "deploy_quick.sh" ]; then
+            if [ -x "deploy_quick.sh" ]; then
+              echo "✅ deploy_quick.sh is executable"
+            else
+              echo "⚠️  deploy_quick.sh is not executable"
+            fi
+          fi
+
+      - name: Validate VersionManager class
+        run: |
+          echo "🔍 Validating VersionManager..."
+          
+          php -r "
+          require 'class/VersionManager.class.php';
+          \$vm = new VersionManager();
+          \$info = \$vm->getVersionInfo();
+          if (!isset(\$info['version']) || empty(\$info['version'])) {
+            echo '❌ VersionManager::getVersionInfo() failed';
+            exit(1);
+          }
+          echo '✅ VersionManager::getVersionInfo() works';
+          echo '  Version: ' . \$info['version'] . PHP_EOL;
+          "
+
+      - name: Test database schema
+        run: |
+          echo "🔍 Validating SQL schemas..."
+          
+          if [ -f "sql/llx_modmkp_tables.sql" ]; then
+            if grep -q "CREATE TABLE" sql/llx_modmkp_tables.sql; then
+              echo "✅ llx_modmkp_tables.sql contains table definitions"
+            fi
+          fi
+          
+          if [ -f "sql/llx_modmkp_mapping.sql" ]; then
+            if grep -q "CREATE TABLE" sql/llx_modmkp_mapping.sql; then
+              echo "✅ llx_modmkp_mapping.sql contains table definitions"
+            fi
+          fi
+
+  documentation-check:
+    runs-on: ubuntu-latest
+    name: Documentation Validation
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Check README
+        run: |
+          echo "🔍 Checking README..."
+          
+          if [ -f "README.md" ]; then
+            if grep -q "MarketPlace" README.md; then
+              echo "✅ README.md exists and has content"
+              wc -l README.md
+            else
+              echo "⚠️  README.md seems incomplete"
+            fi
+          else
+            echo "❌ README.md not found"
+            exit 1
+          fi
+
+      - name: Check CHANGELOG
+        run: |
+          echo "🔍 Checking CHANGELOG..."
+          
+          if [ -f "CHANGELOG.md" ]; then
+            if grep -q "##" CHANGELOG.md; then
+              echo "✅ CHANGELOG.md has version entries"
+              head -20 CHANGELOG.md
+            fi
+          else
+            echo "❌ CHANGELOG.md not found"
+            exit 1
+          fi
+
+      - name: Check VERSION_MANAGEMENT.md
+        run: |
+          if [ -f "VERSION_MANAGEMENT.md" ]; then
+            echo "✅ VERSION_MANAGEMENT.md found"
+          else
+            echo "⚠️  VERSION_MANAGEMENT.md not found"
+          fi
+
+  lint-failure:
+    runs-on: ubuntu-latest
+    if: failure()
+    needs: [validate-module, documentation-check]
+    steps:
+      - uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ Validation failed. Please check the workflow logs.'
+            })

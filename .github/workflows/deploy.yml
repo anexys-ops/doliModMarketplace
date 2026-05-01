@@ -1,0 +1,191 @@
+name: Deploy to Server
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        description: 'Deployment target'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+          - development
+
+jobs:
+  prepare-deployment:
+    runs-on: ubuntu-latest
+    name: Prepare Deployment Package
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      package_name: ${{ steps.package.outputs.filename }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(grep "const VERSION = " class/VersionManager.class.php | sed "s/.*const VERSION = '\([^']*\)'.*/\1/")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "✅ Version: $VERSION"
+
+      - name: Create deployment package
+        id: package
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          PACKAGE_NAME="marketplace_bdc_v${VERSION}.tar.gz"
+          
+          echo "📦 Creating package: $PACKAGE_NAME"
+          
+          tar -czf "$PACKAGE_NAME" \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            --exclude='*.log' \
+            --exclude='.version-build' \
+            --exclude='.DS_Store' \
+            .
+          
+          echo "filename=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+          echo "✅ Package created: $(ls -lh "$PACKAGE_NAME" | awk '{print $5}')"
+
+      - name: Upload package as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: deployment-package
+          path: ${{ steps.package.outputs.filename }}
+          retention-days: 30
+
+  notify-deployment:
+    runs-on: ubuntu-latest
+    needs: prepare-deployment
+    steps:
+      - name: Create deployment notification
+        run: |
+          echo "🚀 Deployment Package Ready"
+          echo ""
+          echo "Version: ${{ needs.prepare-deployment.outputs.version }}"
+          echo "Package: ${{ needs.prepare-deployment.outputs.package_name }}"
+          echo ""
+          echo "📝 Next steps:"
+          echo "1. Download artifact from GitHub Actions"
+          echo "2. Deploy to server using:"
+          echo "   scp -P 150 marketplace_bdc_v${{ needs.prepare-deployment.outputs.version }}.tar.gz root@dlbp150r58.edicloud.app:/tmp/"
+          echo "   ssh -p 150 root@dlbp150r58.edicloud.app 'cd /var/www/dolibarr/htdocs/custom && tar -xzf /tmp/marketplace_bdc_v${{ needs.prepare-deployment.outputs.version }}.tar.gz'"
+
+  update-release-notes:
+    runs-on: ubuntu-latest
+    needs: prepare-deployment
+    name: Update Release Notes
+    if: github.event_name == 'release'
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Extract and enhance release notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare-deployment.outputs.version }}
+        run: |
+          echo "📝 Extracting changelog for version $VERSION..."
+          
+          # Extract version-specific changelog
+          if grep -q "## \[$VERSION\]" CHANGELOG.md; then
+            echo "✅ Found changelog entry for $VERSION"
+          else
+            echo "⚠️  No changelog entry found for $VERSION"
+          fi
+
+      - name: Create deployment guide
+        run: |
+          cat > DEPLOYMENT_v${{ needs.prepare-deployment.outputs.version }}.md << 'EOF'
+          # Deployment Guide - Version ${{ needs.prepare-deployment.outputs.version }}
+          
+          ## Prerequisites
+          - SSH access to dlbp150r58.edicloud.app (port 150)
+          - Root privileges
+          - wget or curl installed
+          
+          ## Deployment Steps
+          
+          ### 1. Download Package
+          ```bash
+          cd /tmp
+          wget https://github.com/anexys-ops/doliModMarketplace/releases/download/v${{ needs.prepare-deployment.outputs.version }}/marketplace_bdc_v${{ needs.prepare-deployment.outputs.version }}.tar.gz
+          ```
+          
+          ### 2. Backup Current Version
+          ```bash
+          cd /var/www/dolibarr/htdocs/custom
+          tar -czf marketplace_bdc_backup_$(date +%Y%m%d_%H%M%S).tar.gz marketplace_bdc/
+          ```
+          
+          ### 3. Extract New Version
+          ```bash
+          cd /var/www/dolibarr/htdocs/custom
+          tar -xzf /tmp/marketplace_bdc_v${{ needs.prepare-deployment.outputs.version }}.tar.gz
+          ```
+          
+          ### 4. Set Permissions
+          ```bash
+          chown -R www-data:www-data /var/www/dolibarr/htdocs/custom/marketplace_bdc
+          chmod -R 755 /var/www/dolibarr/htdocs/custom/marketplace_bdc
+          ```
+          
+          ### 5. Verify Deployment
+          ```bash
+          php -l /var/www/dolibarr/htdocs/custom/marketplace_bdc/core/modules/modMarketPlace_BDC.class.php
+          ```
+          
+          ### 6. Test Module
+          - Log in to Dolibarr
+          - Go to Administration → Setup → Modules
+          - Look for "MarketPlace_BDC" module
+          - Check version: should be ${{ needs.prepare-deployment.outputs.version }}
+          
+          ## Rollback (if needed)
+          ```bash
+          cd /var/www/dolibarr/htdocs/custom
+          rm -rf marketplace_bdc/
+          tar -xzf marketplace_bdc_backup_*.tar.gz
+          ```
+          
+          ## Verification
+          - URL: https://dlbp150r58.edicloud.app/custom/marketplace_bdc/admin/setup.php
+          - Check version in "About" tab
+          - Should show: v${{ needs.prepare-deployment.outputs.version }}
+          EOF
+          
+          echo "✅ Deployment guide created"
+
+      - name: Upload deployment guide
+        uses: actions/upload-artifact@v3
+        with:
+          name: deployment-guide-v${{ needs.prepare-deployment.outputs.version }}
+          path: DEPLOYMENT_v${{ needs.prepare-deployment.outputs.version }}.md
+
+  summary:
+    runs-on: ubuntu-latest
+    needs: prepare-deployment
+    steps:
+      - name: Print summary
+        run: |
+          echo "═════════════════════════════════════════════════════════"
+          echo "         📦 Release Package Ready for Deployment"
+          echo "═════════════════════════════════════════════════════════"
+          echo ""
+          echo "Version: ${{ needs.prepare-deployment.outputs.version }}"
+          echo "Package: ${{ needs.prepare-deployment.outputs.package_name }}"
+          echo ""
+          echo "✅ Artifacts available:"
+          echo "   • Deployment package"
+          echo "   • Deployment guide"
+          echo ""
+          echo "🚀 Ready to deploy to production!"
+          echo ""
