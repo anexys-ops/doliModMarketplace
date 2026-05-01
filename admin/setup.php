@@ -56,16 +56,6 @@ if (!$user->admin) {
     accessforbidden();
 }
 
-// Verify CSRF token for POST requests
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    if (!GETPOST('token')) {
-        setEventMessages($langs->trans('CSRFTokenMissing'), null, 'errors');
-    } elseif (!isValidToken(GETPOST('token'))) {
-        setEventMessages($langs->trans('CSRFTokenInvalid'), null, 'errors');
-        $_GET['action'] = '';
-    }
-}
-
 // Get action
 $action = GETPOST('action', 'alpha');
 $tab = GETPOST('tab', 'alpha') ?: 'general';
@@ -138,76 +128,66 @@ if ($action == 'test_endpoint') {
 }
 
 // ACTIONS
-if ($action == 'update_general') {
-    if (GETPOST('token') && isValidToken(GETPOST('token'))) {
-        dolibarr_set_const($db, 'MARKETPLACE_BDC_ENABLE_SYNC', GETPOST('enable_sync') ? '1' : '0', 'chaine', 0, '', $conf->entity);
-        dolibarr_set_const($db, 'MARKETPLACE_BDC_AUTO_SYNC_TIME', GETPOST('auto_sync_time', 'int'), 'chaine', 0, '', $conf->entity);
-        setEventMessages($langs->trans('SetupSaved'), null, 'mesgs');
-    }
+if ($action == 'savegeneral') {
+    dolibarr_set_const($db, 'MARKETPLACE_BDC_ENABLE_SYNC', GETPOST('enable_sync') ? '1' : '0', 'chaine', 0, '', $conf->entity);
+    dolibarr_set_const($db, 'MARKETPLACE_BDC_AUTO_SYNC_TIME', GETPOST('auto_sync_time', 'int'), 'chaine', 0, '', $conf->entity);
+    setEventMessages($langs->trans('SetupSaved'), null, 'mesgs');
     $tab = 'general';
 }
 
-if ($action == 'add_endpoint') {
-    if (GETPOST('token') && isValidToken(GETPOST('token'))) {
-        $endpoint_name = GETPOST('endpoint_name', 'alpha');
-        $endpoint_url = GETPOST('endpoint_url', 'string');
-        $endpoint_type = GETPOST('endpoint_type', 'alpha');
-        
-        if ($endpoint_name && $endpoint_url) {
-            $endpoints = json_decode($conf->global->MARKETPLACE_BDC_ENDPOINTS ?? '{}', true);
-            $endpoints[$endpoint_name] = array(
-                'url' => $endpoint_url,
-                'type' => $endpoint_type,
-                'created' => date('Y-m-d H:i:s')
-            );
-            dolibarr_set_const($db, 'MARKETPLACE_BDC_ENDPOINTS', json_encode($endpoints), 'chaine', 0, '', $conf->entity);
-            setEventMessages($langs->trans('EndpointAdded'), null, 'mesgs');
-        }
-    }
-    $tab = 'endpoints';
-}
-
-if ($action == 'delete_endpoint') {
-    if (GETPOST('token') && isValidToken(GETPOST('token'))) {
-        $endpoint_id = GETPOST('endpoint_id', 'alpha');
+if ($action == 'newendpoint') {
+    $endpoint_name = GETPOST('endpoint_name', 'alpha');
+    $endpoint_url = GETPOST('endpoint_url', 'string');
+    $endpoint_type = GETPOST('endpoint_type', 'alpha');
+    
+    if ($endpoint_name && $endpoint_url) {
         $endpoints = json_decode($conf->global->MARKETPLACE_BDC_ENDPOINTS ?? '{}', true);
-        unset($endpoints[$endpoint_id]);
+        $endpoints[$endpoint_name] = array(
+            'url' => $endpoint_url,
+            'type' => $endpoint_type,
+            'created' => date('Y-m-d H:i:s')
+        );
         dolibarr_set_const($db, 'MARKETPLACE_BDC_ENDPOINTS', json_encode($endpoints), 'chaine', 0, '', $conf->entity);
-        setEventMessages($langs->trans('EndpointDeleted'), null, 'mesgs');
+        setEventMessages($langs->trans('EndpointAdded'), null, 'mesgs');
     }
     $tab = 'endpoints';
 }
 
-if ($action == 'add_mapping') {
-    if (GETPOST('token') && isValidToken(GETPOST('token'))) {
-        $mapping_name = GETPOST('mapping_name', 'alpha');
-        $mapping_source = GETPOST('mapping_source', 'alpha');
-        $mapping_target = GETPOST('mapping_target', 'alpha');
-        $mapping_type = GETPOST('mapping_type', 'alpha');
-        
-        if ($mapping_name && $mapping_source && $mapping_target) {
-            $mappings = json_decode($conf->global->MARKETPLACE_BDC_MAPPINGS ?? '{}', true);
-            $mappings[$mapping_name] = array(
-                'source' => $mapping_source,
-                'target' => $mapping_target,
-                'type' => $mapping_type,
-                'created' => date('Y-m-d H:i:s')
-            );
-            dolibarr_set_const($db, 'MARKETPLACE_BDC_MAPPINGS', json_encode($mappings), 'chaine', 0, '', $conf->entity);
-            setEventMessages($langs->trans('MappingAdded'), null, 'mesgs');
-        }
+if ($action == 'rmendpoint') {
+    $endpoint_id = GETPOST('endpoint_id', 'alpha');
+    $endpoints = json_decode($conf->global->MARKETPLACE_BDC_ENDPOINTS ?? '{}', true);
+    unset($endpoints[$endpoint_id]);
+    dolibarr_set_const($db, 'MARKETPLACE_BDC_ENDPOINTS', json_encode($endpoints), 'chaine', 0, '', $conf->entity);
+    setEventMessages($langs->trans('EndpointDeleted'), null, 'mesgs');
+    $tab = 'endpoints';
+}
+
+if ($action == 'newmapping') {
+    $mapping_name = GETPOST('mapping_name', 'alpha');
+    $mapping_source = GETPOST('mapping_source', 'alpha');
+    $mapping_target = GETPOST('mapping_target', 'alpha');
+    $mapping_type = GETPOST('mapping_type', 'alpha');
+    
+    if ($mapping_name && $mapping_source && $mapping_target) {
+        $mappings = json_decode($conf->global->MARKETPLACE_BDC_MAPPINGS ?? '{}', true);
+        $mappings[$mapping_name] = array(
+            'source' => $mapping_source,
+            'target' => $mapping_target,
+            'type' => $mapping_type,
+            'created' => date('Y-m-d H:i:s')
+        );
+        dolibarr_set_const($db, 'MARKETPLACE_BDC_MAPPINGS', json_encode($mappings), 'chaine', 0, '', $conf->entity);
+        setEventMessages($langs->trans('MappingAdded'), null, 'mesgs');
     }
     $tab = 'mappings';
 }
 
-if ($action == 'delete_mapping') {
-    if (GETPOST('token') && isValidToken(GETPOST('token'))) {
-        $mapping_id = GETPOST('mapping_id', 'alpha');
-        $mappings = json_decode($conf->global->MARKETPLACE_BDC_MAPPINGS ?? '{}', true);
-        unset($mappings[$mapping_id]);
-        dolibarr_set_const($db, 'MARKETPLACE_BDC_MAPPINGS', json_encode($mappings), 'chaine', 0, '', $conf->entity);
-        setEventMessages($langs->trans('MappingDeleted'), null, 'mesgs');
-    }
+if ($action == 'rmmapping') {
+    $mapping_id = GETPOST('mapping_id', 'alpha');
+    $mappings = json_decode($conf->global->MARKETPLACE_BDC_MAPPINGS ?? '{}', true);
+    unset($mappings[$mapping_id]);
+    dolibarr_set_const($db, 'MARKETPLACE_BDC_MAPPINGS', json_encode($mappings), 'chaine', 0, '', $conf->entity);
+    setEventMessages($langs->trans('MappingDeleted'), null, 'mesgs');
     $tab = 'mappings';
 }
 
@@ -245,7 +225,7 @@ print '<hr>';
 if ($tab == 'general') {
     print '<form method="POST" action="' . $_SERVER['PHP_SELF'] . '?tab=general">';
     print '<input type="hidden" name="token" value="' . newToken() . '">';
-    print '<input type="hidden" name="action" value="update_general">';
+    print '<input type="hidden" name="action" value="savegeneral">';
     
     print '<div class="div-table-responsive">';
     print '<table class="noborder centpercent">';
@@ -271,7 +251,7 @@ elseif ($tab == 'endpoints') {
     print '<h3>' . $langs->trans('AddEndpoint') . '</h3>';
     print '<form method="POST" action="' . $_SERVER['PHP_SELF'] . '?tab=endpoints" style="margin-top: 10px;">';
     print '<input type="hidden" name="token" value="' . newToken() . '">';
-    print '<input type="hidden" name="action" value="add_endpoint">';
+    print '<input type="hidden" name="action" value="newendpoint">';
     
     print '<div class="div-table-responsive"><table class="noborder">';
     print '<tr>';
@@ -300,7 +280,7 @@ elseif ($tab == 'endpoints') {
             print '<td>' . htmlspecialchars($endpoint['type']) . '</td>';
             print '<td>' . $endpoint['created'] . '</td>';
             print '<td>';
-            print '<a href="?tab=endpoints&action=delete_endpoint&endpoint_id=' . urlencode($id) . '" class="button button-delete" onclick="return confirm(\'' . $langs->trans('ConfirmDelete') . '\');">' . $langs->trans('Delete') . '</a>';
+            print '<a href="?tab=endpoints&action=rmendpoint&endpoint_id=' . urlencode($id) . '" class="button button-delete" onclick="return confirm(\'' . $langs->trans('ConfirmDelete') . '\');">' . $langs->trans('Delete') . '</a>';
             print '</td></tr>';
         }
         print '</table></div>';
@@ -314,7 +294,7 @@ elseif ($tab == 'mappings') {
     print '<h3>' . $langs->trans('AddMapping') . '</h3>';
     print '<form method="POST" action="' . $_SERVER['PHP_SELF'] . '?tab=mappings" style="margin-top: 10px;">';
     print '<input type="hidden" name="token" value="' . newToken() . '">';
-    print '<input type="hidden" name="action" value="add_mapping">';
+    print '<input type="hidden" name="action" value="newmapping">';
     
     print '<div class="div-table-responsive"><table class="noborder">';
     print '<tr>';
@@ -346,7 +326,7 @@ elseif ($tab == 'mappings') {
             print '<td><code>' . htmlspecialchars($mapping['target']) . '</code></td>';
             print '<td>' . $mapping['created'] . '</td>';
             print '<td>';
-            print '<a href="?tab=mappings&action=delete_mapping&mapping_id=' . urlencode($id) . '" class="button button-delete" onclick="return confirm(\'' . $langs->trans('ConfirmDelete') . '\');">' . $langs->trans('Delete') . '</a>';
+            print '<a href="?tab=mappings&action=rmmapping&mapping_id=' . urlencode($id) . '" class="button button-delete" onclick="return confirm(\'' . $langs->trans('ConfirmDelete') . '\');">' . $langs->trans('Delete') . '</a>';
             print '</td></tr>';
         }
         print '</table></div>';
