@@ -1,0 +1,45 @@
+// Language file for MarketPlace_BDC module - French
+
+// Configuration
+'Setup' = 'Configuration';
+'Configuration' = 'Configuration du module';
+'EnableAutoSync' = 'Activer la synchronisation automatique';
+'EnableAutoSyncDesc' = 'Synchronisation automatique des offres avec les marketplaces';
+'AutoSyncInterval' = 'Intervalle de synchronisation';
+'AutoSyncIntervalDesc' = 'Intervalle en secondes entre chaque synchronisation automatique';
+
+// Module Status
+'ModuleStatus' = 'Statut du module';
+'ModuleEnabled' = 'Module activé';
+'Version' = 'Version';
+'Rights' = 'Droits';
+'Configured' = 'Configurés';
+'Tabs' = 'Onglets';
+'ProductTab' = 'Onglet produit - Marketplaces';
+
+// Information
+'Information' = 'Information';
+'MarketPlacesIntegration' = 'Gestion intégrée des offres marketplace';
+'SupportsMultipleMarketplaces' = 'Support de multiples marketplaces (ADEO, Cdiscount, Amazon, WooCommerce)';
+'AutomaticSynchronization' = 'Synchronisation automatique avec les marketplaces';
+
+// Dashboard
+'Dashboard' = 'Tableau de bord';
+'Orders' = 'Commandes';
+'OffersCount' = 'Nombre d''offres';
+'OrdersCount' = 'Nombre de commandes';
+'LastSync' = 'Dernière synchronisation';
+
+// Products
+'Marketplace' = 'Marketplace';
+'SKU' = 'SKU';
+'Price' = 'Prix';
+'Quantity' = 'Quantité';
+'Status' = 'Statut';
+'Action' = 'Action';
+'Save' = 'Enregistrer';
+
+// Errors
+'ErrorModuleNotFound' = 'Module non trouvé';
+'ErrorConfiguration' = 'Erreur de configuration';
+'ErrorSync' = 'Erreur de synchronisation';
