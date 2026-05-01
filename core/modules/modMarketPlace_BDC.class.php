@@ -52,8 +52,20 @@ class modMarketPlace_BDC extends DolibarrModules
         // Constants
         $this->const = array();
 
+        // Dictionaries
+        $this->dictionaries = array();
+
+        // Boxes
+        $this->boxes = array();
+
         // Some pages
         $this->menu = array();
+
+        // Triggers
+        $this->triggers = array();
+
+        // Permissions
+        $this->rights = array();
     }
 
     /**
