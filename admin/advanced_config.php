@@ -340,6 +340,7 @@ function sanitizeString($str) {
         <button class="tab" onclick="showTab('cron')">⏰ Cron Jobs</button>
         <button class="tab" onclick="showTab('tests')">🧪 Connection Tests</button>
         <button class="tab" onclick="showTab('settings')">🔧 Settings</button>
+        <button class="tab" onclick="showTab('about')">ℹ️ About</button>
     </div>
     
     <!-- ENDPOINTS TAB -->
@@ -492,6 +493,182 @@ function sanitizeString($str) {
                 
                 <button type="submit" class="btn btn-success">💾 Save Settings</button>
             </form>
+        </div>
+    </div>
+    
+    <!-- ABOUT TAB -->
+    <div id="about" class="tab-content">
+        <div class="section">
+            <h2>ℹ️ About MarketPlace Module</h2>
+            
+            <style>
+                .about-card {
+                    background: #f9f9f9;
+                    border: 1px solid #ddd;
+                    border-radius: 8px;
+                    padding: 20px;
+                    margin: 15px 0;
+                }
+                
+                .about-card h3 {
+                    margin: 0 0 10px 0;
+                    color: #667eea;
+                    font-size: 16px;
+                }
+                
+                .about-card p {
+                    margin: 8px 0;
+                    font-size: 13px;
+                    line-height: 1.6;
+                }
+                
+                .about-card .label {
+                    font-weight: bold;
+                    color: #333;
+                    min-width: 120px;
+                    display: inline-block;
+                }
+                
+                .about-card .value {
+                    color: #666;
+                    font-family: monospace;
+                }
+                
+                .badge-version {
+                    display: inline-block;
+                    background: #667eea;
+                    color: white;
+                    padding: 4px 12px;
+                    border-radius: 20px;
+                    font-size: 12px;
+                    font-weight: bold;
+                    margin: 0 5px 0 0;
+                }
+            </style>
+            
+            <?php
+            // Load version manager
+            if (file_exists(DOL_DOCUMENT_ROOT . '/custom/marketplace_bdc/class/VersionManager.class.php')) {
+                require_once DOL_DOCUMENT_ROOT . '/custom/marketplace_bdc/class/VersionManager.class.php';
+                $version_manager = new VersionManager();
+                $version_info = $version_manager->getVersionInfo();
+                $git_info = $version_manager->getGitInfo();
+                $build_info = $version_manager->getBuildInfo();
+                $release_notes = $version_manager->getReleaseNotes();
+            } else {
+                $version_info = array('version' => '1.2.0');
+                $git_info = array('branch' => 'main', 'commit' => 'Unknown');
+                $build_info = array();
+                $release_notes = array();
+            }
+            ?>
+            
+            <!-- Version Info Card -->
+            <div class="about-card">
+                <h3>📦 Version Information</h3>
+                <p>
+                    <span class="label">Module Version:</span>
+                    <span class="badge-version"><?php echo $version_info['version']; ?></span>
+                </p>
+                <p>
+                    <span class="label">Release Date:</span>
+                    <span class="value"><?php echo $version_info['version_date']; ?></span>
+                </p>
+                <p>
+                    <span class="label">PHP Required:</span>
+                    <span class="value"><?php echo $version_info['php_min']; ?>+</span>
+                </p>
+                <p>
+                    <span class="label">PHP Current:</span>
+                    <span class="value"><?php echo $version_info['php_current']; ?></span>
+                </p>
+                <p>
+                    <span class="label">Dolibarr Required:</span>
+                    <span class="value"><?php echo $version_info['dolibarr_min']; ?>+</span>
+                </p>
+            </div>
+            
+            <!-- Git Info Card -->
+            <div class="about-card">
+                <h3>🔗 Git Information</h3>
+                <p>
+                    <span class="label">Repository:</span>
+                    <span class="value">https://github.com/anexys-ops/doliModMarketplace</span>
+                </p>
+                <p>
+                    <span class="label">Branch:</span>
+                    <span class="value"><?php echo htmlspecialchars($git_info['branch']); ?></span>
+                </p>
+                <p>
+                    <span class="label">Commit:</span>
+                    <span class="value"><?php echo htmlspecialchars($git_info['commit_short']); ?></span>
+                </p>
+                <p>
+                    <span class="label">Commit Date:</span>
+                    <span class="value"><?php echo htmlspecialchars($git_info['commit_date']); ?></span>
+                </p>
+                <p>
+                    <span class="label">Author:</span>
+                    <span class="value"><?php echo htmlspecialchars($git_info['commit_author']); ?></span>
+                </p>
+                <?php if (!empty($git_info['tags'])): ?>
+                <p>
+                    <span class="label">Tags:</span>
+                    <span class="value"><?php echo htmlspecialchars(implode(', ', $git_info['tags'])); ?></span>
+                </p>
+                <?php endif; ?>
+            </div>
+            
+            <!-- Build Info Card -->
+            <div class="about-card">
+                <h3>⚙️ Build Information</h3>
+                <p>
+                    <span class="label">Build Date:</span>
+                    <span class="value"><?php echo isset($build_info['build_date']) ? $build_info['build_date'] : date('Y-m-d H:i:s'); ?></span>
+                </p>
+                <p>
+                    <span class="label">Server OS:</span>
+                    <span class="value"><?php echo htmlspecialchars(php_uname('s')); ?></span>
+                </p>
+                <p>
+                    <span class="label">Server Info:</span>
+                    <span class="value"><?php echo htmlspecialchars(php_uname()); ?></span>
+                </p>
+            </div>
+            
+            <!-- Features Card -->
+            <div class="about-card">
+                <h3>✨ Features</h3>
+                <ul style="margin: 10px 0; padding-left: 20px;">
+                    <li>Multi-marketplace support (ADEO, Cdiscount, Amazon, WooCommerce)</li>
+                    <li>Advanced configuration with Endpoints & Cron jobs</li>
+                    <li>Complete field mapping with Extrafields support</li>
+                    <li>DEV/PROD connection testing</li>
+                    <li>Comprehensive logging & monitoring</li>
+                    <li>Order management & synchronization</li>
+                </ul>
+            </div>
+            
+            <!-- Support Card -->
+            <div class="about-card">
+                <h3>📞 Support & Resources</h3>
+                <p>
+                    <span class="label">GitHub:</span>
+                    <a href="https://github.com/anexys-ops/doliModMarketplace" target="_blank">
+                        https://github.com/anexys-ops/doliModMarketplace
+                    </a>
+                </p>
+                <p>
+                    <span class="label">Linear:</span>
+                    <a href="https://linear.app/anexys/project/dolibarr-modulemarketplace-bdc-f79cfe2c5ebb" target="_blank">
+                        Track project progress
+                    </a>
+                </p>
+                <p>
+                    <span class="label">Contact:</span>
+                    <span class="value">fahd@anexys.fr</span>
+                </p>
+            </div>
         </div>
     </div>
 </div>
