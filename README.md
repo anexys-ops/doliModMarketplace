@@ -1,6 +1,8 @@
 # ModuleMarketPlace - Dolibarr Marketplace Manager
 
-**Version 1.0** | Gérer les offres produits sur les marketplaces (ADEO, Cdiscount, Amazon, WooCommerce)
+**Version 1.2.0** | Gérer les offres produits sur les marketplaces (ADEO, Cdiscount, Amazon, WooCommerce)
+
+> 📋 **Version & Git Info:** Voir Administration → MarketPlace_BDC → Configuration → About
 
 ## 🚀 Features
 
@@ -76,6 +78,8 @@ marketplace_bdc/
 - [Testing Guide](./TESTING_GUIDE.md) - Comment tester
 - [JSON Config Architecture](./JSON_CONFIG_ARCHITECTURE.md) - Architecture config
 - [Onglet Troubleshooting](./ONGLET_TROUBLESHOOTING.md) - Fix onglet non visible
+- **[Version Management](./VERSION_MANAGEMENT.md)** - 📌 Guide versioning & Git
+- **[Configuration Version Info](./CONFIG_VERSION_INTEGRATION.md)** - 📌 About tab details
 
 ## 🔐 Configuration
 
