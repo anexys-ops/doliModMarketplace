@@ -30,6 +30,14 @@
 'MappingAdded' = 'Mapping ajouté avec succès';
 'MappingDeleted' = 'Mapping supprimé avec succès';
 
+// Test Connections
+'TestConnections' = 'Tester les connexions';
+'Test' = 'Tester';
+'TestCredentials' = 'Clés de test';
+'ConnectionOK' = 'Connexion OK';
+'ConnectionFailed' = 'Connexion échouée';
+'AuthType' = 'Type d''authentification';
+
 // Module Status
 'ModuleStatus' = 'Statut du module';
 'ModuleEnabled' = 'Module activé';

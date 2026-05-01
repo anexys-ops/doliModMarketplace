@@ -38,6 +38,73 @@ if (!$user->admin) {
 $action = GETPOST('action', 'alpha');
 $tab = GETPOST('tab', 'alpha') ?: 'general';
 
+// Predefined test endpoints
+$test_endpoints = array(
+    'cdiscount' => array(
+        'name' => 'Cdiscount',
+        'url' => 'https://api.cdiscount.com/api/1.0',
+        'type' => 'REST',
+        'auth_url' => 'https://api.cdiscount.com/api/1.0/auth/GenerateToken',
+        'client_id' => 'LuxGreenApiCdiscount',
+        'client_secret' => 'YlXszv0hpB86bwZSXkyHYvL7RX3s0fIa'
+    ),
+    'mirakl' => array(
+        'name' => 'Mirakl ADEO',
+        'url' => 'https://adeo-marketplace.mirakl.net/api',
+        'type' => 'REST',
+        'auth_type' => 'header',
+        'api_key' => 'd93a0347-3645-41ff-98d0-8837017a1bfa'
+    ),
+    'amazon' => array(
+        'name' => 'Amazon SP-API (EU)',
+        'url' => 'https://sellingpartnerapi-eu.amazon.com',
+        'type' => 'REST',
+        'auth_type' => 'oauth2',
+        'seller_id' => 'A3EH3LRP5DO8KW',
+        'client_id' => 'amzn1.application-oa2-client.9d11c3172c03474090f53b3f127d8759'
+    )
+);
+
+// Test endpoint connection
+$test_result = null;
+if ($action == 'test_endpoint') {
+    $endpoint_id = GETPOST('test_endpoint_id', 'alpha');
+    if (isset($test_endpoints[$endpoint_id])) {
+        $endpoint = $test_endpoints[$endpoint_id];
+        try {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $endpoint['url']);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            
+            if ($endpoint_id == 'cdiscount' && isset($endpoint['auth_url'])) {
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(array(
+                    'ClientID' => $endpoint['client_id'],
+                    'ClientSecret' => $endpoint['client_secret']
+                )));
+                curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json'));
+            } elseif ($endpoint_id == 'mirakl') {
+                curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+                    'Authorization: ' . $endpoint['api_key']
+                ));
+            }
+            
+            $response = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($http_code >= 200 && $http_code < 400) {
+                $test_result = array('status' => 'success', 'message' => $langs->trans('ConnectionOK') . ' (HTTP ' . $http_code . ')');
+            } else {
+                $test_result = array('status' => 'error', 'message' => $langs->trans('ConnectionFailed') . ' (HTTP ' . $http_code . ')');
+            }
+        } catch (Exception $e) {
+            $test_result = array('status' => 'error', 'message' => $e->getMessage());
+        }
+    }
+}
+
 // ACTIONS
 if ($action == 'update_general') {
     dolibarr_set_const($db, 'MARKETPLACE_BDC_ENABLE_SYNC', GETPOST('enable_sync') ? '1' : '0', 'chaine', 0, '', $conf->entity);
@@ -120,7 +187,8 @@ print load_fiche_titre($langs->trans('Setup'), '', 'marketplace_bdc@marketplace_
 $tabs = array(
     'general' => $langs->trans('GeneralSettings'),
     'endpoints' => $langs->trans('Endpoints'),
-    'mappings' => $langs->trans('Mappings')
+    'mappings' => $langs->trans('Mappings'),
+    'test' => $langs->trans('TestConnections')
 );
 
 print '<div class="tabs">';
@@ -241,6 +309,79 @@ elseif ($tab == 'mappings') {
         }
         print '</table></div>';
     }
+}
+
+// TAB 4: TEST CONNECTIONS
+elseif ($tab == 'test') {
+    print '<h3>' . $langs->trans('TestConnections') . '</h3>';
+    
+    if ($test_result) {
+        $class = ($test_result['status'] == 'success') ? 'alert-success' : 'alert-danger';
+        print '<div class="' . $class . '" style="padding: 10px; margin-bottom: 20px;">';
+        print $test_result['message'];
+        print '</div>';
+    }
+    
+    print '<h4>Endpoints de Test Disponibles</h4>';
+    print '<div class="div-table-responsive" style="margin-bottom: 20px;">';
+    print '<table class="noborder centpercent">';
+    print '<tr class="liste_titre">';
+    print '<th>Marketplace</th>';
+    print '<th>Endpoint</th>';
+    print '<th>Auth Type</th>';
+    print '<th>Action</th>';
+    print '</tr>';
+    
+    foreach ($test_endpoints as $id => $endpoint) {
+        print '<tr>';
+        print '<td><strong>' . $endpoint['name'] . '</strong></td>';
+        print '<td><code style="font-size: 11px;">' . htmlspecialchars($endpoint['url']) . '</code></td>';
+        print '<td>';
+        if ($id == 'cdiscount') print '<span class="badge">OAuth2</span>';
+        elseif ($id == 'mirakl') print '<span class="badge">API Key</span>';
+        elseif ($id == 'amazon') print '<span class="badge">OAuth2 LWA</span>';
+        print '</td>';
+        print '<td>';
+        print '<form method="POST" style="display: inline;">';
+        print '<input type="hidden" name="token" value="' . newToken() . '">';
+        print '<input type="hidden" name="action" value="test_endpoint">';
+        print '<input type="hidden" name="tab" value="test">';
+        print '<input type="hidden" name="test_endpoint_id" value="' . htmlspecialchars($id) . '">';
+        print '<input type="submit" class="button button-sm" value="Tester">';
+        print '</form>';
+        print '</td>';
+        print '</tr>';
+    }
+    
+    print '</table>';
+    print '</div>';
+    
+    // Test Keys Display
+    print '<hr>';
+    print '<h4>Clés de Test Configurées</h4>';
+    print '<div class="div-table-responsive">';
+    print '<table class="noborder centpercent">';
+    print '<tr class="liste_titre"><th>Clé</th><th>Valeur</th><th>Statut</th></tr>';
+    
+    $test_keys = array(
+        'CDISCOUNT_CLIENT_ID' => 'LuxGreenApiCdiscount',
+        'CDISCOUNT_API_BASE' => 'https://api.cdiscount.com/api/1.0',
+        'MIRAKL_API_KEY' => 'd93a0347-3645-41ff-98d0-8837017a1bfa',
+        'MIRAKL_API_BASE' => 'https://adeo-marketplace.mirakl.net/api',
+        'AMAZON_SELLER_ID' => 'A3EH3LRP5DO8KW',
+        'AMAZON_MARKETPLACE_FR' => 'A13V1IB3VIYZZH'
+    );
+    
+    foreach ($test_keys as $key => $value) {
+        print '<tr>';
+        print '<td><strong>' . htmlspecialchars($key) . '</strong></td>';
+        print '<td><code style="font-size: 11px;">' . htmlspecialchars(substr($value, 0, 50)) . (strlen($value) > 50 ? '...' : '') . '</code></td>';
+        print '<td><span class="badge badge-success">✓</span></td>';
+        print '</tr>';
+    }
+    
+    print '</table>';
+    print '</div>';
 }
 
 llxFooter();
