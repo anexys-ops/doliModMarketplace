@@ -1,5 +1,10 @@
 // Language file for MarketPlace_BDC module - French
 
+// Tabs
+'GeneralSettings' = 'Paramètres généraux';
+'Endpoints' = 'Endpoints';
+'Mappings' = 'Mappings';
+
 // Configuration
 'Setup' = 'Configuration';
 'Configuration' = 'Configuration du module';
@@ -7,6 +12,23 @@
 'EnableAutoSyncDesc' = 'Synchronisation automatique des offres avec les marketplaces';
 'AutoSyncInterval' = 'Intervalle de synchronisation';
 'AutoSyncIntervalDesc' = 'Intervalle en secondes entre chaque synchronisation automatique';
+
+// Endpoints
+'AddEndpoint' = 'Ajouter un endpoint';
+'ConfiguredEndpoints' = 'Endpoints configurés';
+'EndpointName' = 'Nom de l''endpoint';
+'EndpointAdded' = 'Endpoint ajouté avec succès';
+'EndpointDeleted' = 'Endpoint supprimé avec succès';
+'Type' = 'Type';
+
+// Mappings
+'AddMapping' = 'Ajouter un mapping';
+'ConfiguredMappings' = 'Mappings configurés';
+'MappingName' = 'Nom du mapping';
+'SourceField' = 'Champ source';
+'TargetField' = 'Champ cible';
+'MappingAdded' = 'Mapping ajouté avec succès';
+'MappingDeleted' = 'Mapping supprimé avec succès';
 
 // Module Status
 'ModuleStatus' = 'Statut du module';
@@ -38,6 +60,12 @@
 'Status' = 'Statut';
 'Action' = 'Action';
 'Save' = 'Enregistrer';
+'Add' = 'Ajouter';
+'Delete' = 'Supprimer';
+'Name' = 'Nom';
+'URL' = 'URL';
+'Created' = 'Créé';
+'ConfirmDelete' = 'Êtes-vous sûr de vouloir supprimer ?';
 
 // Errors
 'ErrorModuleNotFound' = 'Module non trouvé';
