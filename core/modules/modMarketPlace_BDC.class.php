@@ -86,12 +86,7 @@ class modMarketPlace_BDC extends DolibarrModules
      */
     public function init($options = '')
     {
-        $sql = array();
-
-        // Create SQL tables
-        $this->load_tables_sql_files('/marketplace_bdc/sql/');
-
-        // Rights
+        // Define rights during initialization
         $this->rights = array();
         $r = 0;
 
