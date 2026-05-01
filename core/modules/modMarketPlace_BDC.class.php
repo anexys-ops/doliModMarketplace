@@ -53,10 +53,17 @@ class modMarketPlace_BDC extends DolibarrModules
         $this->const = array();
 
         // Dictionaries
-        $this->dictionaries = array();
+        $this->dictionaries = array(
+            'tabname' => array(),
+            'tablib' => array(),
+            'condition' => array(),
+        );
 
         // Boxes
         $this->boxes = array();
+
+        // Cronjobs
+        $this->cronjobs = array();
 
         // Some pages
         $this->menu = array();
@@ -66,6 +73,9 @@ class modMarketPlace_BDC extends DolibarrModules
 
         // Permissions
         $this->rights = array();
+
+        // Tabs
+        $this->tabs = array();
     }
 
     /**
