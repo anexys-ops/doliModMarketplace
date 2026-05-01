@@ -57,8 +57,11 @@ class modMarketPlace_BDC extends DolibarrModules
 
     /**
      * Init
+     * 
+     * @param string $options Options
+     * @return int 1 if ok, 0 if error
      */
-    public function init()
+    public function init($options = '')
     {
         $sql = array();
 
@@ -153,5 +156,7 @@ class modMarketPlace_BDC extends DolibarrModules
             'target' => '',
             'user' => 2,
         );
+
+        return 1;
     }
 }
