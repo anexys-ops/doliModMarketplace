@@ -24,7 +24,8 @@ class modMarketPlace_BDC extends DolibarrModules
         $this->name = preg_replace('/^mod/i', '', get_class($this));
         $this->const_name = 'MAIN_MODULE_' . strtoupper($this->name);
         $this->description = 'MarketPlace Manager - Manage product offers across multiple marketplaces (ADEO, Cdiscount, Amazon, WooCommerce)';
-        $this->version = '1.0.0';
+        $this->version = '1.2.0';  // Version Dolibarr (must match VersionManager)
+        $this->version_dolibarr = '17.0';  // Minimum Dolibarr version
         $this->need_dolibarr_version = array(17, 0);
         $this->phpmin = array(8, 1);
         $this->picto = 'fa-globe';
