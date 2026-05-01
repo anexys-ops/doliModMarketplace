@@ -26,6 +26,8 @@ if (!$product_id) {
 // Begin tab content
 ?>
 <form method="POST" id="marketplace_form" class="tabpanel">
+    <?php echo $hookmanager->getReplacedContent('product_tab', array('product_id' => $product_id)); ?>
+    <input type="hidden" name="token" value="<?php echo newToken(); ?>">
     <input type="hidden" name="action" value="save_marketplace">
     <input type="hidden" name="object_id" value="<?php echo $product_id; ?>">
     
