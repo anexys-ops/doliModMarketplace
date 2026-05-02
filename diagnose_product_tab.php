@@ -58,7 +58,7 @@ require_once $rootPath;
     echo '<div class="section">';
     echo '<h2>1. Module Status</h2>';
     
-    if (isModEnabled('marketplace_bdc')) {
+    if (!empty($conf->global->MAIN_MODULE_MARKETPLACE_BDC)) {
         echo '<p class="ok">✓ Module marketplace_bdc est activé</p>';
     } else {
         echo '<p class="error">✗ Module marketplace_bdc n\'est PAS activé</p>';

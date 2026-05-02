@@ -32,7 +32,7 @@ global $db, $user, $langs, $conf;
 $langs->load('marketplace_bdc@marketplace_bdc');
 
 // Security
-if (!isModEnabled('marketplace_bdc')) {
+if (empty($conf->global->MAIN_MODULE_MARKETPLACE_BDC)) {
     die("Module not enabled");
 }
 

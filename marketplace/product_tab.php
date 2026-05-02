@@ -31,7 +31,7 @@ $id     = GETPOSTINT('id');
 $action = GETPOST('action', 'aZ09');
 
 if (empty($id)) { accessforbidden(); exit; }
-if (!isModEnabled('marketplace_bdc')) { accessforbidden(); exit; }
+if (empty($conf->global->MAIN_MODULE_MARKETPLACE_BDC)) { accessforbidden(); exit; }
 
 // ── Chargement produit ────────────────────────────────────────────────────────
 $object = new Product($db);

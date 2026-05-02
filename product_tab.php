@@ -30,7 +30,7 @@ if (!$rootPath) {
 require_once $rootPath;
 
 // Security check
-if (!isModEnabled('marketplace_bdc')) {
+if (empty($conf->global->MAIN_MODULE_MARKETPLACE_BDC)) {
     die("Module not enabled");
 }
 

@@ -28,7 +28,7 @@ require_once $rootPath;
 
 global $db, $user, $langs, $conf;
 
-if (!isModEnabled('marketplace_bdc')) {
+if (empty($conf->global->MAIN_MODULE_MARKETPLACE_BDC)) {
     accessforbidden('Module not enabled');
 }
 
