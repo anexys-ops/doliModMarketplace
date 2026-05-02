@@ -709,11 +709,21 @@ if ($action == 'rmfield' && $mkt_id) {
     $tab = 'marketplaces';
 }
 
-// Ajouter une nouvelle marketplace personnalisée
+// Ajouter une marketplace (depuis un préset ou en mode personnalisé)
 if ($action == 'newmkt') {
-    $new_id   = preg_replace('/[^a-z0-9_]/', '', strtolower(GETPOST('new_mkt_id', 'alpha')));
-    $new_name = GETPOST('new_mkt_name', 'string');
-    if ($new_id && $new_name && !isset($marketplaces[$new_id])) {
+    $preset_id = preg_replace('/[^a-z0-9_]/', '', strtolower(GETPOST('preset_id', 'alpha')));
+    $new_id    = preg_replace('/[^a-z0-9_]/', '', strtolower(GETPOST('new_mkt_id', 'alpha')));
+    $new_name  = GETPOST('new_mkt_name', 'string');
+
+    if ($preset_id && isset($default_marketplaces[$preset_id]) && !isset($db_marketplaces[$preset_id])) {
+        // Ajout depuis un préset : on enregistre juste un flag d'activation en DB
+        // (les valeurs par défaut viennent de $default_marketplaces, on ne stocke que enabled=0)
+        $db_marketplaces[$preset_id] = array('enabled' => 0);
+        dolibarr_set_const($db, 'MARKETPLACE_BDC_MARKETPLACES', json_encode($db_marketplaces), 'chaine', 0, '', $conf->entity);
+        setEventMessages('Marketplace ajoutée : '.$default_marketplaces[$preset_id]['name'], null, 'mesgs');
+        $mkt_id = $preset_id;
+    } elseif ($new_id && $new_name && !isset($db_marketplaces[$new_id]) && !isset($default_marketplaces[$new_id])) {
+        // Création d'une marketplace personnalisée
         $db_marketplaces[$new_id] = array(
             'name'      => $new_name,
             'enabled'   => 0,
@@ -722,17 +732,19 @@ if ($action == 'newmkt') {
             'mappings'  => array('product' => array(), 'price' => array(), 'stock' => array(), 'order' => array()),
         );
         dolibarr_set_const($db, 'MARKETPLACE_BDC_MARKETPLACES', json_encode($db_marketplaces), 'chaine', 0, '', $conf->entity);
-        setEventMessages('Marketplace créée.', null, 'mesgs');
+        setEventMessages('Marketplace personnalisée créée : '.$new_name, null, 'mesgs');
         $mkt_id = $new_id;
+    } else {
+        setEventMessages('Marketplace déjà présente ou identifiant invalide.', null, 'warnings');
     }
     $tab = 'marketplaces';
 }
 
-// Supprimer une marketplace personnalisée (pas celles par défaut)
-if ($action == 'rmmkt' && $mkt_id && !isset($default_marketplaces[$mkt_id])) {
+// Supprimer une marketplace (la retire de la DB, qu'elle soit préset ou custom)
+if ($action == 'rmmkt' && $mkt_id) {
     unset($db_marketplaces[$mkt_id]);
     dolibarr_set_const($db, 'MARKETPLACE_BDC_MARKETPLACES', json_encode($db_marketplaces), 'chaine', 0, '', $conf->entity);
-    setEventMessages('Marketplace supprimée.', null, 'mesgs');
+    setEventMessages('Marketplace retirée.', null, 'mesgs');
     $mkt_id = '';
     $tab    = 'marketplaces';
 }
@@ -786,12 +798,13 @@ foreach ($db_marketplaces as $k => $v) {
 $enable_sync    = isset($conf->global->MARKETPLACE_BDC_ENABLE_SYNC)    ? $conf->global->MARKETPLACE_BDC_ENABLE_SYNC    : '0';
 $auto_sync_time = isset($conf->global->MARKETPLACE_BDC_AUTO_SYNC_TIME) ? $conf->global->MARKETPLACE_BDC_AUTO_SYNC_TIME : '3600';
 
-// Marketplace active par défaut
-if (!$mkt_id || !isset($marketplaces[$mkt_id])) {
-    reset($marketplaces);
-    $mkt_id = key($marketplaces);
+// Marketplace active : seulement parmi celles ajoutées en DB
+if (!$mkt_id || !isset($db_marketplaces[$mkt_id])) {
+    reset($db_marketplaces);
+    $mkt_id = count($db_marketplaces) ? key($db_marketplaces) : '';
 }
-$mkt = $marketplaces[$mkt_id];
+// Valeurs fusionnées (défaut + DB) pour la marketplace sélectionnée
+$mkt = isset($marketplaces[$mkt_id]) ? $marketplaces[$mkt_id] : array('name' => '', 'enabled' => 0, 'auth_type' => 'apikey', 'endpoints' => array(), 'mappings' => array());
 
 // ─── AFFICHAGE ────────────────────────────────────────────────────────────────
 llxHeader('', 'Configuration Marketplaces');
@@ -844,29 +857,65 @@ elseif ($tab == 'marketplaces') {
     print '<div style="display:flex; gap:24px; align-items:flex-start;">';
 
     // ── Sidebar sélecteur ──────────────────────────────────────────────────
-    print '<div style="min-width:200px; border-right:1px solid #ddd; padding-right:16px;">';
-    print '<p style="font-weight:bold; margin-bottom:8px; font-size:13px; color:#555;">MARKETPLACES</p>';
-    foreach ($marketplaces as $kid => $kmkt) {
-        $active    = ($kid === $mkt_id) ? 'background:#e8f4fd; border-left:3px solid #0069d9; font-weight:bold;' : '';
-        $enabled   = ($kmkt['enabled'] ?? 0) ? '🟢' : '🔴';
-        $is_custom = !isset($default_marketplaces[$kid]);
-        print '<a href="'.$_SERVER['PHP_SELF'].'?tab=marketplaces&mkt='.urlencode($kid).'"
-                  style="display:block; padding:8px 12px; margin-bottom:4px; text-decoration:none; color:#333; border-radius:4px; '.$active.'">';
-        print $enabled.' '.htmlspecialchars($kmkt['name']);
-        if ($is_custom) { print ' <small style="color:#999">[custom]</small>'; }
-        print '</a>';
+    print '<div style="min-width:220px; max-width:220px; border-right:1px solid #ddd; padding-right:16px; flex-shrink:0;">';
+    print '<p style="font-weight:bold; margin-bottom:8px; font-size:12px; color:#555; text-transform:uppercase; letter-spacing:1px;">Mes Marketplaces</p>';
+
+    if (empty($db_marketplaces)) {
+        print '<p style="color:#999; font-size:12px; font-style:italic;">Aucune marketplace ajoutée.<br>Cliquez sur <strong>+</strong> pour commencer.</p>';
+    } else {
+        foreach ($db_marketplaces as $kid => $kdb) {
+            // Valeurs fusionnées pour affichage
+            $kmkt   = isset($marketplaces[$kid]) ? $marketplaces[$kid] : $kdb;
+            $active = ($kid === $mkt_id) ? 'background:#e8f4fd; border-left:3px solid #0069d9; font-weight:bold;' : 'border-left:3px solid transparent;';
+            $dot    = ($kmkt['enabled'] ?? 0) ? '<span style="color:#28a745">●</span>' : '<span style="color:#dc3545">●</span>';
+            $is_custom = !isset($default_marketplaces[$kid]);
+            print '<a href="'.$_SERVER['PHP_SELF'].'?tab=marketplaces&mkt='.urlencode($kid).'"
+                      style="display:flex; align-items:center; gap:6px; padding:8px 10px; margin-bottom:3px; text-decoration:none; color:#333; border-radius:4px; font-size:13px; '.$active.'">';
+            print $dot.' '.htmlspecialchars($kmkt['name'] ?? $kid);
+            if ($is_custom) { print ' <small style="color:#aaa; font-size:10px;">✎</small>'; }
+            print '</a>';
+        }
     }
-    // Ajouter nouvelle marketplace
+
+    // ── Bouton + et panneau d'ajout ────────────────────────────────────────
     print '<hr style="margin:12px 0">';
-    print '<button type="button" onclick="document.getElementById(\'newmkt_panel\').style.display=\'block\'" class="button button-sm" style="width:100%;font-size:12px">+ Ajouter</button>';
-    print '<div id="newmkt_panel" style="display:none; margin-top:8px;">';
+    print '<button type="button" onclick="document.getElementById(\'newmkt_panel\').style.display=(document.getElementById(\'newmkt_panel\').style.display==\'none\'?\'block\':\'none\')" class="button button-sm" style="width:100%;font-size:12px;">＋ Ajouter une marketplace</button>';
+    print '<div id="newmkt_panel" style="display:none; margin-top:10px; background:#f9f9f9; border:1px solid #ddd; border-radius:4px; padding:10px;">';
+
+    // Présets disponibles (ceux non encore ajoutés)
+    $available_presets = array();
+    foreach ($default_marketplaces as $pid => $pdata) {
+        if (!isset($db_marketplaces[$pid])) {
+            $available_presets[$pid] = $pdata['name'];
+        }
+    }
+
+    if (!empty($available_presets)) {
+        print '<p style="font-size:12px; font-weight:bold; margin:0 0 6px 0;">Depuis un préset :</p>';
+        print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?tab=marketplaces">';
+        print '<input type="hidden" name="token"  value="'.newToken().'">';
+        print '<input type="hidden" name="action" value="newmkt">';
+        print '<select name="preset_id" style="width:100%; margin-bottom:6px; font-size:12px;">';
+        print '<option value="">— Choisir —</option>';
+        foreach ($available_presets as $pid => $pname) {
+            print '<option value="'.htmlspecialchars($pid).'">'.htmlspecialchars($pname).'</option>';
+        }
+        print '</select>';
+        print '<button type="submit" class="button button-primary" style="width:100%; font-size:12px;">Ajouter ce préset</button>';
+        print '</form>';
+        print '<hr style="margin:8px 0">';
+    }
+
+    print '<p style="font-size:12px; font-weight:bold; margin:0 0 6px 0;">Marketplace personnalisée :</p>';
     print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?tab=marketplaces">';
     print '<input type="hidden" name="token"  value="'.newToken().'">';
     print '<input type="hidden" name="action" value="newmkt">';
-    print '<input type="text" name="new_mkt_id"   placeholder="id (ex: leroy)" style="width:100%;margin-bottom:4px" required><br>';
-    print '<input type="text" name="new_mkt_name" placeholder="Nom affiché"   style="width:100%;margin-bottom:4px" required><br>';
-    print '<input type="submit" class="button" value="Créer" style="width:100%">';
-    print '</form></div>';
+    print '<input type="text" name="new_mkt_id"   placeholder="id unique (ex: monsite)"  style="width:100%;margin-bottom:4px;font-size:12px;" required><br>';
+    print '<input type="text" name="new_mkt_name" placeholder="Nom affiché"              style="width:100%;margin-bottom:6px;font-size:12px;" required><br>';
+    print '<button type="submit" class="button" style="width:100%; font-size:12px;">Créer</button>';
+    print '</form>';
+    print '</div>'; // end newmkt_panel
+
     print '</div>'; // end sidebar
 
     // ── Panel principal de la marketplace sélectionnée ────────────────────
@@ -875,6 +924,18 @@ elseif ($tab == 'marketplaces') {
     if ($test_result) {
         $c = $test_result['ok'] ? 'ok' : 'error';
         print '<div class="'.$c.'" style="padding:8px 12px; margin-bottom:12px; border-radius:4px;">'.htmlspecialchars($test_result['msg']).'</div>';
+    }
+
+    // Aucune marketplace ajoutée
+    if (empty($db_marketplaces) || !$mkt_id) {
+        print '<div style="text-align:center; padding:60px 20px; color:#888;">';
+        print '<div style="font-size:48px; margin-bottom:16px;">🛒</div>';
+        print '<h3 style="margin-bottom:8px;">Aucune marketplace configurée</h3>';
+        print '<p>Cliquez sur <strong>＋ Ajouter une marketplace</strong> dans le panneau gauche<br>pour commencer à configurer vos places de marché.</p>';
+        print '</div>';
+        print '</div></div>'; // close panel + flex
+        llxFooter();
+        exit;
     }
 
     // Formulaire principal marketplace
@@ -962,9 +1023,11 @@ elseif ($tab == 'marketplaces') {
     print '<button type="submit" class="button button-action">🔌 Tester la connexion</button>';
     print '</form>';
 
-    if (!isset($default_marketplaces[$mkt_id])) {
-        print ' <a href="'.$_SERVER['PHP_SELF'].'?tab=marketplaces&mkt='.urlencode($mkt_id).'&action=rmmkt" class="button button-danger" onclick="return confirm(\'Supprimer cette marketplace ?\')">🗑 Supprimer</a>';
-    }
+    $rm_label = isset($default_marketplaces[$mkt_id]) ? '🗑 Retirer' : '🗑 Supprimer';
+    $rm_confirm = isset($default_marketplaces[$mkt_id])
+        ? 'Retirer cette marketplace de votre configuration ? (Les valeurs par défaut seront conservées et vous pourrez la rajouter.)'
+        : 'Supprimer définitivement cette marketplace personnalisée ?';
+    print ' <a href="'.$_SERVER['PHP_SELF'].'?tab=marketplaces&mkt='.urlencode($mkt_id).'&action=rmmkt" class="button button-danger" onclick="return confirm(\''.addslashes($rm_confirm).'\')">'.$rm_label.'</a>';
 
     // ── Section Mappings par flux ──────────────────────────────────────────
     print '<hr style="margin:24px 0">';
