@@ -1,8 +1,8 @@
 <?php
 /**
  * Tools - Marketplace Logs & Monitoring
- * 
- * Admin interface for viewing and managing logs
+ *
+ * Page accessible depuis le menu Outils de Dolibarr
  * Path: /custom/marketplace_bdc/admin/tools.php
  */
 
@@ -29,53 +29,49 @@ require_once $rootPath;
 global $db, $user, $langs, $conf;
 
 if (!isModEnabled('marketplace_bdc')) {
-    die("Module not enabled");
+    accessforbidden('Module not enabled');
 }
 
 if (!$user->hasRight('marketplace_bdc', 'marketplace', 'admin')) {
-    die("Access denied");
+    accessforbidden();
 }
 
 $langs->load('marketplace_bdc@marketplace_bdc');
 
-// Get filters
-$filter_marketplace = isset($_GET['marketplace_id']) ? intval($_GET['marketplace_id']) : 0;
-$filter_status = isset($_GET['status']) ? sanitizeString($_GET['status']) : '';
-$filter_type = isset($_GET['type']) ? sanitizeString($_GET['type']) : '';
-$filter_date_from = isset($_GET['date_from']) ? sanitizeString($_GET['date_from']) : '';
-$filter_date_to = isset($_GET['date_to']) ? sanitizeString($_GET['date_to']) : '';
-$page = isset($_GET['page']) ? intval($_GET['page']) : 0;
+// Filtres
+$filter_marketplace = GETPOSTINT('marketplace_id');
+$filter_status      = GETPOST('status', 'alpha');
+$filter_type        = GETPOST('type', 'alpha');
+$filter_date_from   = GETPOST('date_from', 'alpha');
+$filter_date_to     = GETPOST('date_to', 'alpha');
+$page               = GETPOSTINT('page');
 
-// Get actions
-$action = isset($_GET['action']) ? sanitizeString($_GET['action']) : '';
+$action = GETPOST('action', 'alpha');
 
-// Handle purge action
-if ($action == 'purge' && isset($_GET['days'])) {
-    $days = intval($_GET['days']);
-    $sql = "DELETE FROM " . MAIN_DB_PREFIX . "modmkp_synclog 
-            WHERE date_created < DATE_SUB(NOW(), INTERVAL " . $days . " DAY)";
+// Purge
+if ($action === 'purge' && GETPOSTINT('days') > 0) {
+    $days = GETPOSTINT('days');
+    if (!empty($_GET['token']) || !empty($_POST['token'])) {
+        // csrf handled natively by Dolibarr via formconfirm - simple confirm suffices here
+    }
+    $sql = "DELETE FROM " . MAIN_DB_PREFIX . "modmkp_synclog
+            WHERE date_created < DATE_SUB(NOW(), INTERVAL " . (int) $days . " DAY)";
     $db->query($sql);
-    $success = "Logs purged";
+    setEventMessages($langs->trans('LogsPurged', $days), null, 'mesgs');
+    header('Location: ' . $_SERVER['PHP_SELF']);
+    exit;
 }
 
-// Handle export
-if ($action == 'export') {
-    header('Content-Type: text/csv');
+// Export CSV
+if ($action === 'export') {
+    header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="marketplace_logs_' . date('Y-m-d') . '.csv"');
-    
-    $filters = array(
-        'marketplace_id' => $filter_marketplace,
-        'status' => $filter_status,
-        'type' => $filter_type,
-        'date_from' => $filter_date_from,
-        'date_to' => $filter_date_to
-    );
-    
+
     $sql = "SELECT rowid, fk_marketplace, type, status, message, date_created
             FROM " . MAIN_DB_PREFIX . "modmkp_synclog WHERE 1=1";
-    
+
     if ($filter_marketplace) {
-        $sql .= " AND fk_marketplace = " . $filter_marketplace;
+        $sql .= " AND fk_marketplace = " . (int) $filter_marketplace;
     }
     if ($filter_status) {
         $sql .= " AND status = '" . $db->escape($filter_status) . "'";
@@ -87,444 +83,321 @@ if ($action == 'export') {
         $sql .= " AND date_created >= '" . $db->escape($filter_date_from) . "'";
     }
     if ($filter_date_to) {
-        $sql .= " AND date_created <= '" . $db->escape($filter_date_to) . "'";
+        $sql .= " AND date_created <= '" . $db->escape($filter_date_to) . " 23:59:59'";
     }
-    
+
     $sql .= " ORDER BY date_created DESC LIMIT 10000";
     $result = $db->query($sql);
-    
-    echo "Date,Marketplace,Type,Status,Message\n";
+
+    // BOM UTF-8 pour Excel
+    echo "\xEF\xBB\xBF";
+    echo "Date,Marketplace ID,Type,Statut,Message\n";
     while ($row = $db->fetch_object($result)) {
-        $date = date('Y-m-d H:i:s', strtotime($row->date_created));
-        echo "\"" . $date . "\",";
-        echo "\"" . $row->fk_marketplace . "\",";
-        echo "\"" . $row->type . "\",";
-        echo "\"" . $row->status . "\",";
-        echo "\"" . addslashes($row->message) . "\"\n";
+        $date = dol_print_date(strtotime($row->date_created), 'dayhourlog');
+        echo '"' . $date . '",';
+        echo '"' . (int) $row->fk_marketplace . '",';
+        echo '"' . htmlspecialchars_decode($row->type) . '",';
+        echo '"' . htmlspecialchars_decode($row->status) . '",';
+        echo '"' . str_replace('"', '""', $row->message) . '"' . "\n";
     }
     exit;
 }
 
-// Get marketplaces
+// --- Récupération des données ---
+
+// Liste des marketplaces
 $sql_markets = "SELECT rowid, code, label FROM " . MAIN_DB_PREFIX . "modmkp_marketplace ORDER BY label";
 $result_markets = $db->query($sql_markets);
 $marketplaces = [];
-while ($row = $db->fetch_object($result_markets)) {
-    $marketplaces[] = $row;
+if ($result_markets) {
+    while ($row = $db->fetch_object($result_markets)) {
+        $marketplaces[] = $row;
+    }
 }
 
-// Get logs with filters
-$sql = "SELECT rowid, fk_marketplace, type, status, message, date_created
-        FROM " . MAIN_DB_PREFIX . "modmkp_synclog WHERE 1=1";
+// Construction de la requête principale
+$sql_base = "FROM " . MAIN_DB_PREFIX . "modmkp_synclog WHERE 1=1";
 
 if ($filter_marketplace) {
-    $sql .= " AND fk_marketplace = " . $filter_marketplace;
+    $sql_base .= " AND fk_marketplace = " . (int) $filter_marketplace;
 }
 if ($filter_status) {
-    $sql .= " AND status = '" . $db->escape($filter_status) . "'";
+    $sql_base .= " AND status = '" . $db->escape($filter_status) . "'";
 }
 if ($filter_type) {
-    $sql .= " AND type = '" . $db->escape($filter_type) . "'";
+    $sql_base .= " AND type = '" . $db->escape($filter_type) . "'";
 }
 if ($filter_date_from) {
-    $sql .= " AND date_created >= '" . $db->escape($filter_date_from) . "'";
+    $sql_base .= " AND date_created >= '" . $db->escape($filter_date_from) . "'";
 }
 if ($filter_date_to) {
-    $sql .= " AND date_created <= '" . $db->escape($filter_date_to) . "'";
+    $sql_base .= " AND date_created <= '" . $db->escape($filter_date_to) . " 23:59:59'";
 }
 
-$sql_count = str_replace('rowid, fk_marketplace, type, status, message, date_created', 'COUNT(*) as cnt', $sql);
-$result_count = $db->query($sql_count);
-$row_count = $db->fetch_object($result_count);
-$total_logs = $row_count->cnt;
+// Comptage total
+$r_count = $db->query("SELECT COUNT(*) as cnt " . $sql_base);
+$total_logs = 0;
+if ($r_count) {
+    $row_c = $db->fetch_object($r_count);
+    $total_logs = (int) $row_c->cnt;
+}
 
-$sql .= " ORDER BY date_created DESC LIMIT 50 OFFSET " . ($page * 50);
+// Statistiques globales
+$stat_ok   = 0;
+$stat_err  = 0;
+$stat_warn = 0;
+$r_ok = $db->query("SELECT COUNT(*) as c FROM " . MAIN_DB_PREFIX . "modmkp_synclog WHERE status='ok'");
+if ($r_ok) { $ro = $db->fetch_object($r_ok); $stat_ok = (int) $ro->c; }
+$r_err = $db->query("SELECT COUNT(*) as c FROM " . MAIN_DB_PREFIX . "modmkp_synclog WHERE status='error'");
+if ($r_err) { $ro = $db->fetch_object($r_err); $stat_err = (int) $ro->c; }
+$r_warn = $db->query("SELECT COUNT(*) as c FROM " . MAIN_DB_PREFIX . "modmkp_synclog WHERE status='warning'");
+if ($r_warn) { $ro = $db->fetch_object($r_warn); $stat_warn = (int) $ro->c; }
+
+// Pagination
+$limit  = 50;
+$offset = max(0, (int) $page) * $limit;
+
+$sql = "SELECT rowid, fk_marketplace, type, status, message, date_created " . $sql_base;
+$sql .= " ORDER BY date_created DESC LIMIT " . $limit . " OFFSET " . $offset;
 $result = $db->query($sql);
-$logs = [];
-while ($row = $db->fetch_object($result)) {
-    $logs[] = $row;
+$logs   = [];
+if ($result) {
+    while ($row = $db->fetch_object($result)) {
+        $logs[] = $row;
+    }
 }
 
-function sanitizeString($str) {
-    global $db;
-    return $db->escape(strip_tags($str));
+// Map marketplace id -> label
+$mkp_map = [];
+foreach ($marketplaces as $m) {
+    $mkp_map[$m->rowid] = htmlspecialchars($m->label);
 }
+
+// ----------------------------------------------------------------
+// Affichage
+// ----------------------------------------------------------------
+
+$title      = 'Logs Import/Export Marketplace';
+$help_url   = '';
+$morehead   = '';
+
+llxHeader($morehead, $title, $help_url);
+
+print_fiche_titre($title, '', 'fa-list-alt');
+
+// Filtres
+$export_url = $_SERVER['PHP_SELF'] . '?action=export'
+    . '&marketplace_id=' . urlencode((string) $filter_marketplace)
+    . '&status=' . urlencode($filter_status)
+    . '&type=' . urlencode($filter_type)
+    . '&date_from=' . urlencode($filter_date_from)
+    . '&date_to=' . urlencode($filter_date_to);
 
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Marketplace Logs & Monitoring</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f5f5f5;
-            margin: 0;
-            padding: 20px;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        h1 {
-            color: #333;
-            margin-bottom: 20px;
-            border-bottom: 3px solid #007bff;
-            padding-bottom: 10px;
-        }
-        
-        .filters {
-            background: #f9f9f9;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        
-        .filter-group {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-        
-        .filter-group label {
-            font-weight: bold;
-            font-size: 12px;
-            color: #666;
-        }
-        
-        .filter-group select,
-        .filter-group input {
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 13px;
-            min-width: 150px;
-        }
-        
-        .btn {
-            padding: 8px 15px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 13px;
-            text-decoration: none;
-            display: inline-block;
-        }
-        
-        .btn-primary {
-            background: #007bff;
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background: #0056b3;
-        }
-        
-        .btn-success {
-            background: #28a745;
-            color: white;
-        }
-        
-        .btn-success:hover {
-            background: #218838;
-        }
-        
-        .btn-warning {
-            background: #ffc107;
-            color: black;
-        }
-        
-        .btn-warning:hover {
-            background: #e0a800;
-        }
-        
-        .btn-danger {
-            background: #dc3545;
-            color: white;
-        }
-        
-        .btn-danger:hover {
-            background: #c82333;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-        }
-        
-        th {
-            background: #f0f0f0;
-            padding: 12px;
-            text-align: left;
-            border-bottom: 2px solid #ddd;
-            font-weight: bold;
-        }
-        
-        td {
-            padding: 10px 12px;
-            border-bottom: 1px solid #eee;
-            font-size: 13px;
-        }
-        
-        tr:hover {
-            background: #f9f9f9;
-        }
-        
-        .status-ok {
-            color: #28a745;
-            font-weight: bold;
-        }
-        
-        .status-error {
-            color: #dc3545;
-            font-weight: bold;
-        }
-        
-        .status-warning {
-            color: #ffc107;
-            font-weight: bold;
-        }
-        
-        .status-pending {
-            color: #17a2b8;
-            font-weight: bold;
-        }
-        
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin: 20px 0;
-        }
-        
-        .stat-card {
-            background: #f9f9f9;
-            padding: 15px;
-            border-radius: 5px;
-            border-left: 4px solid #007bff;
-        }
-        
-        .stat-card h3 {
-            margin: 0 0 5px 0;
-            font-size: 12px;
-            color: #666;
-        }
-        
-        .stat-card .number {
-            font-size: 24px;
-            font-weight: bold;
-            color: #333;
-        }
-        
-        .pagination {
-            display: flex;
-            justify-content: center;
-            gap: 5px;
-            margin: 20px 0;
-        }
-        
-        .pagination a,
-        .pagination span {
-            padding: 5px 10px;
-            border: 1px solid #ddd;
-            border-radius: 3px;
-            text-decoration: none;
-            color: #007bff;
-        }
-        
-        .pagination a:hover {
-            background: #f0f0f0;
-        }
-        
-        .pagination .active {
-            background: #007bff;
-            color: white;
-        }
-        
-        .alert {
-            padding: 15px;
-            margin: 15px 0;
-            border-radius: 4px;
-            border-left: 4px solid;
-        }
-        
-        .alert-success {
-            background: #d4edda;
-            color: #155724;
-            border-color: #28a745;
-        }
-    </style>
-</head>
-<body>
 
-<div class="container">
-    <h1>📊 Marketplace Logs & Monitoring</h1>
-    
-    <?php if (isset($success)): ?>
-        <div class="alert alert-success">✓ <?php echo $success; ?></div>
-    <?php endif; ?>
-    
-    <div class="filters">
-        <form method="GET" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; width: 100%;">
-            <div class="filter-group">
-                <label>Marketplace</label>
-                <select name="marketplace_id">
-                    <option value="">All</option>
-                    <?php foreach ($marketplaces as $m): ?>
-                    <option value="<?php echo $m->rowid; ?>" <?php echo $filter_marketplace == $m->rowid ? 'selected' : ''; ?>>
-                        <?php echo htmlspecialchars($m->label); ?>
-                    </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            
-            <div class="filter-group">
-                <label>Type</label>
-                <select name="type">
-                    <option value="">All</option>
-                    <option value="test" <?php echo $filter_type == 'test' ? 'selected' : ''; ?>>Test</option>
-                    <option value="sync" <?php echo $filter_type == 'sync' ? 'selected' : ''; ?>>Sync</option>
-                    <option value="import" <?php echo $filter_type == 'import' ? 'selected' : ''; ?>>Import</option>
-                    <option value="export" <?php echo $filter_type == 'export' ? 'selected' : ''; ?>>Export</option>
-                </select>
-            </div>
-            
-            <div class="filter-group">
-                <label>Status</label>
-                <select name="status">
-                    <option value="">All</option>
-                    <option value="ok" <?php echo $filter_status == 'ok' ? 'selected' : ''; ?>>OK</option>
-                    <option value="error" <?php echo $filter_status == 'error' ? 'selected' : ''; ?>>Error</option>
-                    <option value="warning" <?php echo $filter_status == 'warning' ? 'selected' : ''; ?>>Warning</option>
-                </select>
-            </div>
-            
-            <div class="filter-group">
-                <label>Date From</label>
-                <input type="date" name="date_from" value="<?php echo htmlspecialchars($filter_date_from); ?>">
-            </div>
-            
-            <div class="filter-group">
-                <label>Date To</label>
-                <input type="date" name="date_to" value="<?php echo htmlspecialchars($filter_date_to); ?>">
-            </div>
-            
-            <button type="submit" class="btn btn-primary">Filter</button>
-            <a href="?" class="btn btn-primary">Reset</a>
-            <a href="?action=export&marketplace_id=<?php echo $filter_marketplace; ?>&status=<?php echo $filter_status; ?>&type=<?php echo $filter_type; ?>&date_from=<?php echo $filter_date_from; ?>&date_to=<?php echo $filter_date_to; ?>" class="btn btn-success">📥 Export CSV</a>
-        </form>
-    </div>
-    
-    <div class="stats">
-        <div class="stat-card">
-            <h3>Total Logs</h3>
-            <div class="number"><?php echo $total_logs; ?></div>
-        </div>
-        <div class="stat-card" style="border-left-color: #28a745;">
-            <h3>Success (OK)</h3>
-            <div class="number" style="color: #28a745;">
-                <?php 
-                $sql_ok = "SELECT COUNT(*) as cnt FROM " . MAIN_DB_PREFIX . "modmkp_synclog WHERE status='ok'";
-                $r = $db->query($sql_ok);
-                $ro = $db->fetch_object($r);
-                echo $ro->cnt;
-                ?>
-            </div>
-        </div>
-        <div class="stat-card" style="border-left-color: #dc3545;">
-            <h3>Errors</h3>
-            <div class="number" style="color: #dc3545;">
-                <?php 
-                $sql_err = "SELECT COUNT(*) as cnt FROM " . MAIN_DB_PREFIX . "modmkp_synclog WHERE status='error'";
-                $r = $db->query($sql_err);
-                $ro = $db->fetch_object($r);
-                echo $ro->cnt;
-                ?>
-            </div>
-        </div>
-        <div class="stat-card" style="border-left-color: #ffc107;">
-            <h3>Warnings</h3>
-            <div class="number" style="color: #ffc107;">
-                <?php 
-                $sql_warn = "SELECT COUNT(*) as cnt FROM " . MAIN_DB_PREFIX . "modmkp_synclog WHERE status='warning'";
-                $r = $db->query($sql_warn);
-                $ro = $db->fetch_object($r);
-                echo $ro->cnt;
-                ?>
-            </div>
-        </div>
-    </div>
-    
-    <div style="display: flex; gap: 10px; margin: 20px 0;">
-        <a href="?action=purge&days=7" onclick="return confirm('Delete logs older than 7 days?');" class="btn btn-warning">🗑️ Purge Old (7 days)</a>
-        <a href="?action=purge&days=30" onclick="return confirm('Delete logs older than 30 days?');" class="btn btn-warning">🗑️ Purge Old (30 days)</a>
-    </div>
-    
-    <table>
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>Marketplace</th>
-                <th>Type</th>
-                <th>Status</th>
-                <th>Message</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($logs as $log): 
-                $status_class = 'status-' . $log->status;
-            ?>
-            <tr>
-                <td><?php echo date('Y-m-d H:i:s', strtotime($log->date_created)); ?></td>
-                <td>
-                    <?php 
-                    $name = '';
-                    foreach ($marketplaces as $m) {
-                        if ($m->rowid == $log->fk_marketplace) {
-                            $name = $m->label;
-                            break;
-                        }
-                    }
-                    echo htmlspecialchars($name);
-                    ?>
-                </td>
-                <td><?php echo htmlspecialchars($log->type); ?></td>
-                <td class="<?php echo $status_class; ?>"><?php echo ucfirst($log->status); ?></td>
-                <td><?php echo htmlspecialchars($log->message); ?></td>
-            </tr>
+<!-- Filtres -->
+<form method="GET" action="<?php echo $_SERVER['PHP_SELF']; ?>">
+<div class="div-table-responsive-no-min" style="margin-bottom:15px;">
+<table class="noborder centpercent" style="border-spacing:5px;">
+<tr class="liste_titre">
+    <td><?php echo $langs->trans('Marketplace'); ?></td>
+    <td><?php echo $langs->trans('Type'); ?></td>
+    <td><?php echo $langs->trans('Status'); ?></td>
+    <td><?php echo $langs->trans('DateFrom'); ?></td>
+    <td><?php echo $langs->trans('DateTo'); ?></td>
+    <td></td>
+</tr>
+<tr>
+    <td>
+        <select name="marketplace_id" class="flat minwidth150">
+            <option value="">-- Tous --</option>
+            <?php foreach ($marketplaces as $m): ?>
+            <option value="<?php echo (int) $m->rowid; ?>" <?php echo $filter_marketplace == $m->rowid ? 'selected' : ''; ?>>
+                <?php echo htmlspecialchars($m->label); ?>
+            </option>
             <?php endforeach; ?>
-        </tbody>
-    </table>
-    
-    <?php if (empty($logs)): ?>
-        <p style="text-align: center; color: #999;">No logs found</p>
-    <?php endif; ?>
-    
-    <?php if ($total_logs > 50): ?>
-        <div class="pagination">
-            <?php for ($i = 0; $i < ceil($total_logs / 50); $i++): ?>
-                <a href="?page=<?php echo $i; ?>&marketplace_id=<?php echo $filter_marketplace; ?>&status=<?php echo $filter_status; ?>" 
-                   class="<?php echo $page == $i ? 'active' : ''; ?>">
-                    <?php echo $i + 1; ?>
-                </a>
-            <?php endfor; ?>
+        </select>
+    </td>
+    <td>
+        <select name="type" class="flat minwidth100">
+            <option value="">-- Tous --</option>
+            <option value="test"   <?php echo $filter_type === 'test'   ? 'selected' : ''; ?>>Test</option>
+            <option value="sync"   <?php echo $filter_type === 'sync'   ? 'selected' : ''; ?>>Sync</option>
+            <option value="import" <?php echo $filter_type === 'import' ? 'selected' : ''; ?>>Import</option>
+            <option value="export" <?php echo $filter_type === 'export' ? 'selected' : ''; ?>>Export</option>
+            <option value="order"  <?php echo $filter_type === 'order'  ? 'selected' : ''; ?>>Commande</option>
+            <option value="error"  <?php echo $filter_type === 'error'  ? 'selected' : ''; ?>>Erreur</option>
+        </select>
+    </td>
+    <td>
+        <select name="status" class="flat minwidth100">
+            <option value="">-- Tous --</option>
+            <option value="ok"      <?php echo $filter_status === 'ok'      ? 'selected' : ''; ?>>OK</option>
+            <option value="error"   <?php echo $filter_status === 'error'   ? 'selected' : ''; ?>>Erreur</option>
+            <option value="warning" <?php echo $filter_status === 'warning' ? 'selected' : ''; ?>>Warning</option>
+            <option value="pending" <?php echo $filter_status === 'pending' ? 'selected' : ''; ?>>En attente</option>
+        </select>
+    </td>
+    <td>
+        <input type="date" name="date_from" class="flat" value="<?php echo htmlspecialchars($filter_date_from); ?>" placeholder="Date début">
+    </td>
+    <td>
+        <input type="date" name="date_to" class="flat" value="<?php echo htmlspecialchars($filter_date_to); ?>" placeholder="Date fin">
+    </td>
+    <td style="white-space:nowrap;">
+        <input type="submit" class="button" value="Filtrer">
+        <a href="<?php echo $_SERVER['PHP_SELF']; ?>" class="button">Réinitialiser</a>
+        <a href="<?php echo $export_url; ?>" class="button buttongen">
+            <span class="fa fa-file-csv"></span> Export CSV
+        </a>
+    </td>
+</tr>
+</table>
+</div>
+</form>
+
+<!-- Statistiques -->
+<div class="info-box-container" style="display:flex; gap:12px; margin:15px 0; flex-wrap:wrap;">
+
+    <div class="info-box" style="border-left:4px solid #0088cc; background:#f4f9ff; padding:12px 18px; border-radius:5px; min-width:160px;">
+        <span class="info-box-icon" style="font-size:22px; color:#0088cc;">&#9776;</span>
+        <div class="info-box-content">
+            <span class="info-box-text" style="color:#666; font-size:12px;">Total logs (filtre actif)</span>
+            <span class="info-box-number" style="font-size:24px; font-weight:bold;"><?php echo $total_logs; ?></span>
         </div>
-    <?php endif; ?>
+    </div>
+
+    <div class="info-box" style="border-left:4px solid #28a745; background:#f4fff4; padding:12px 18px; border-radius:5px; min-width:160px;">
+        <span class="info-box-icon" style="font-size:22px; color:#28a745;">&#10003;</span>
+        <div class="info-box-content">
+            <span class="info-box-text" style="color:#666; font-size:12px;">Succès (OK)</span>
+            <span class="info-box-number" style="font-size:24px; font-weight:bold; color:#28a745;"><?php echo $stat_ok; ?></span>
+        </div>
+    </div>
+
+    <div class="info-box" style="border-left:4px solid #dc3545; background:#fff4f4; padding:12px 18px; border-radius:5px; min-width:160px;">
+        <span class="info-box-icon" style="font-size:22px; color:#dc3545;">&#10007;</span>
+        <div class="info-box-content">
+            <span class="info-box-text" style="color:#666; font-size:12px;">Erreurs</span>
+            <span class="info-box-number" style="font-size:24px; font-weight:bold; color:#dc3545;"><?php echo $stat_err; ?></span>
+        </div>
+    </div>
+
+    <div class="info-box" style="border-left:4px solid #ffc107; background:#fffdf0; padding:12px 18px; border-radius:5px; min-width:160px;">
+        <span class="info-box-icon" style="font-size:22px; color:#ffc107;">&#9888;</span>
+        <div class="info-box-content">
+            <span class="info-box-text" style="color:#666; font-size:12px;">Avertissements</span>
+            <span class="info-box-number" style="font-size:24px; font-weight:bold; color:#ffc107;"><?php echo $stat_warn; ?></span>
+        </div>
+    </div>
+
 </div>
 
-</body>
-</html>
+<!-- Actions de purge -->
+<div style="margin:10px 0 15px 0;">
+    <a href="<?php echo $_SERVER['PHP_SELF']; ?>?action=purge&days=7"
+       onclick="return confirm('Supprimer les logs de plus de 7 jours ?');"
+       class="button buttonDelete">
+        <span class="fa fa-trash"></span> Purger > 7 jours
+    </a>
+    &nbsp;
+    <a href="<?php echo $_SERVER['PHP_SELF']; ?>?action=purge&days=30"
+       onclick="return confirm('Supprimer les logs de plus de 30 jours ?');"
+       class="button buttonDelete">
+        <span class="fa fa-trash"></span> Purger > 30 jours
+    </a>
+    &nbsp;
+    <a href="<?php echo $_SERVER['PHP_SELF']; ?>?action=purge&days=90"
+       onclick="return confirm('Supprimer les logs de plus de 90 jours ?');"
+       class="button buttonDelete">
+        <span class="fa fa-trash"></span> Purger > 90 jours
+    </a>
+</div>
+
+<!-- Tableau des logs -->
+<div class="div-table-responsive">
+<table class="tagtable noborder centpercent">
+    <thead>
+    <tr class="liste_titre">
+        <th class="liste_titre"><?php echo $langs->trans('Date'); ?></th>
+        <th class="liste_titre">Marketplace</th>
+        <th class="liste_titre">Type</th>
+        <th class="liste_titre"><?php echo $langs->trans('Status'); ?></th>
+        <th class="liste_titre">Message</th>
+    </tr>
+    </thead>
+    <tbody>
+    <?php if (empty($logs)): ?>
+    <tr>
+        <td colspan="5" class="opacitymedium" style="text-align:center; padding:20px;">
+            Aucun log trouvé avec ces critères.
+        </td>
+    </tr>
+    <?php else: ?>
+    <?php foreach ($logs as $log):
+        $ts = strtotime($log->date_created);
+        $date_str = dol_print_date($ts, 'dayhourlog');
+
+        switch ($log->status) {
+            case 'ok':
+                $badge = '<span style="color:#28a745; font-weight:bold;">&#10003; OK</span>';
+                $row_class = '';
+                break;
+            case 'error':
+                $badge = '<span style="color:#dc3545; font-weight:bold;">&#10007; Erreur</span>';
+                $row_class = 'highlight';
+                break;
+            case 'warning':
+                $badge = '<span style="color:#e0a800; font-weight:bold;">&#9888; Warning</span>';
+                $row_class = '';
+                break;
+            case 'pending':
+                $badge = '<span style="color:#17a2b8; font-weight:bold;">&#8987; En attente</span>';
+                $row_class = '';
+                break;
+            default:
+                $badge = '<span>' . htmlspecialchars($log->status) . '</span>';
+                $row_class = '';
+        }
+
+        $mkp_label = isset($mkp_map[$log->fk_marketplace]) ? $mkp_map[$log->fk_marketplace] : '#' . (int) $log->fk_marketplace;
+    ?>
+    <tr class="<?php echo $row_class; ?>">
+        <td style="white-space:nowrap;"><?php echo $date_str; ?></td>
+        <td><?php echo $mkp_label; ?></td>
+        <td><code><?php echo htmlspecialchars($log->type); ?></code></td>
+        <td><?php echo $badge; ?></td>
+        <td style="max-width:500px; word-break:break-word;"><?php echo nl2br(htmlspecialchars($log->message)); ?></td>
+    </tr>
+    <?php endforeach; ?>
+    <?php endif; ?>
+    </tbody>
+</table>
+</div>
+
+<!-- Pagination -->
+<?php if ($total_logs > $limit): ?>
+<div style="text-align:center; margin:15px 0;">
+    <?php
+    $nb_pages = (int) ceil($total_logs / $limit);
+    for ($i = 0; $i < $nb_pages; $i++):
+        $url_p = $_SERVER['PHP_SELF'] . '?page=' . $i
+            . '&marketplace_id=' . urlencode((string) $filter_marketplace)
+            . '&status=' . urlencode($filter_status)
+            . '&type=' . urlencode($filter_type)
+            . '&date_from=' . urlencode($filter_date_from)
+            . '&date_to=' . urlencode($filter_date_to);
+        if ($page == $i) {
+            echo '<span style="display:inline-block;padding:4px 10px;background:#0088cc;color:#fff;border-radius:3px;margin:2px;">' . ($i + 1) . '</span> ';
+        } else {
+            echo '<a href="' . $url_p . '" style="display:inline-block;padding:4px 10px;border:1px solid #ddd;border-radius:3px;margin:2px;text-decoration:none;">' . ($i + 1) . '</a> ';
+        }
+    endfor;
+    ?>
+</div>
+<?php endif; ?>
+
+<?php
+
+llxFooter();
+$db->close();

@@ -212,6 +212,22 @@ class modMarketPlace_BDC extends DolibarrModules
             'user' => 2,
         );
 
+        // Logs sous le menu Tools de Dolibarr
+        $this->menu[$r++] = array(
+            'fk_menu' => 'fk_mainmenu=tools',
+            'type' => 'left',
+            'titre' => 'Logs Import/Export Marketplace',
+            'mainmenu' => 'tools',
+            'leftmenu' => 'marketplace_bdc_logs',
+            'url' => '/custom/marketplace_bdc/admin/tools.php',
+            'langs' => 'marketplace_bdc@marketplace_bdc',
+            'position' => 200,
+            'enabled' => 'isModEnabled("marketplace_bdc")',
+            'perms' => '$user->hasRight("marketplace_bdc", "marketplace", "admin")',
+            'target' => '',
+            'user' => 2,
+        );
+
         return 1;
     }
 }
