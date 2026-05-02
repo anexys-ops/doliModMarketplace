@@ -648,22 +648,42 @@ if ($action == 'savegeneral') {
 // Sauvegarde config d'une marketplace
 if ($action == 'storemkt' && $mkt_id) {
     if (!isset($db_marketplaces[$mkt_id])) { $db_marketplaces[$mkt_id] = array(); }
+
+    // Valeur par défaut pour ce preset (fallback si champ vide)
+    $def = $default_marketplaces[$mkt_id] ?? array();
+
+    // Helper : prend la valeur POST si non vide, sinon garde la valeur DB existante, sinon la valeur par défaut
+    $sv = function($post_key, $filter, $db_key) use (&$db_marketplaces, $mkt_id, $def) {
+        $v = GETPOST($post_key, $filter);
+        if ($v !== '') {
+            $db_marketplaces[$mkt_id][$db_key] = $v;
+        } elseif (empty($db_marketplaces[$mkt_id][$db_key]) && !empty($def[$db_key])) {
+            // Préserver la valeur par défaut si rien en DB et rien soumis
+            $db_marketplaces[$mkt_id][$db_key] = $def[$db_key];
+        }
+        // Si DB existante non vide et POST vide → on ne touche pas (l'utilisateur a effacé volontairement → ok)
+    };
+
     $new_name = GETPOST('mkt_name', 'string');
     if ($new_name !== '') {
         $db_marketplaces[$mkt_id]['name'] = $new_name;
+    } elseif (empty($db_marketplaces[$mkt_id]['name']) && !empty($def['name'])) {
+        $db_marketplaces[$mkt_id]['name'] = $def['name'];
     }
-    $db_marketplaces[$mkt_id]['enabled']       = GETPOST('mkt_enabled') ? 1 : 0;
-    $db_marketplaces[$mkt_id]['auth_type']     = GETPOST('mkt_auth_type', 'alpha');
-    $db_marketplaces[$mkt_id]['client_id']     = GETPOST('mkt_client_id', 'string');
-    $db_marketplaces[$mkt_id]['client_secret'] = GETPOST('mkt_client_secret', 'string');
-    $db_marketplaces[$mkt_id]['api_key']       = GETPOST('mkt_api_key', 'string');
-    $db_marketplaces[$mkt_id]['seller_id']     = GETPOST('mkt_seller_id', 'string');
-    $db_marketplaces[$mkt_id]['marketplace_id']= GETPOST('mkt_marketplace_id', 'string');
-    $db_marketplaces[$mkt_id]['refresh_token'] = GETPOST('mkt_refresh_token', 'string');
 
-    // Endpoints
-    $ep_keys  = GETPOST('ep_key',  'array');
-    $ep_urls  = GETPOST('ep_url',  'array');
+    $db_marketplaces[$mkt_id]['enabled'] = GETPOST('mkt_enabled') ? 1 : 0;
+
+    $sv('mkt_auth_type',      'alphanohtml', 'auth_type');
+    $sv('mkt_client_id',      'string',      'client_id');
+    $sv('mkt_client_secret',  'string',      'client_secret');
+    $sv('mkt_api_key',        'string',      'api_key');
+    $sv('mkt_seller_id',      'string',      'seller_id');
+    $sv('mkt_marketplace_id', 'alphanohtml', 'marketplace_id');
+    $sv('mkt_refresh_token',  'string',      'refresh_token');
+
+    // Endpoints : fusionner avec les défauts si le formulaire n'en envoie aucun
+    $ep_keys        = GETPOST('ep_key', 'array');
+    $ep_urls        = GETPOST('ep_url', 'array');
     $endpoints_save = array();
     if (is_array($ep_keys)) {
         foreach ($ep_keys as $idx => $epk) {
@@ -673,10 +693,13 @@ if ($action == 'storemkt' && $mkt_id) {
             }
         }
     }
+    if (empty($endpoints_save) && !empty($def['endpoints'])) {
+        $endpoints_save = $def['endpoints'];
+    }
     $db_marketplaces[$mkt_id]['endpoints'] = $endpoints_save;
 
     dolibarr_set_const($db, 'MARKETPLACE_BDC_MARKETPLACES', json_encode($db_marketplaces), 'chaine', 0, '', $conf->entity);
-    setEventMessages('Marketplace sauvegardée.', null, 'mesgs');
+    setEventMessages('Marketplace "'.(isset($db_marketplaces[$mkt_id]['name']) ? $db_marketplaces[$mkt_id]['name'] : $mkt_id).'" sauvegardée.', null, 'mesgs');
     $tab = 'marketplaces';
 }
 
