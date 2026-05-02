@@ -133,6 +133,125 @@ $default_marketplaces = array(
     ),
 );
 
+// ─── Champs disponibles pour le mapping (par flux) ────────────────────────────
+function mkt_get_mapping_fields($db, $flow)
+{
+    // Champs standard produit (communs aux flux produit / prix / stock)
+    $product_fields = array(
+        'Identification'  => array(
+            'rowid'          => 'ID interne',
+            'ref'            => 'Référence (ref)',
+            'ref_ext'        => 'Référence externe',
+            'barcode'        => 'Code-barres',
+            'label'          => 'Libellé',
+        ),
+        'Description'     => array(
+            'description'    => 'Description',
+            'note_public'    => 'Note publique',
+            'url'            => 'URL publique',
+        ),
+        'Prix'            => array(
+            'price'          => 'Prix HT',
+            'price_ttc'      => 'Prix TTC',
+            'price_min'      => 'Prix min HT',
+            'price_min_ttc'  => 'Prix min TTC',
+            'cost_price'     => 'Prix de revient',
+            'tva_tx'         => 'Taux TVA (%)',
+        ),
+        'Stock / logistique' => array(
+            'stock_reel'     => 'Stock réel',
+            'desiredstock'   => 'Stock désiré',
+            'seuil_stock_alerte' => 'Seuil alerte stock',
+            'weight'         => 'Poids (kg)',
+            'weight_units'   => 'Unité poids',
+            'length'         => 'Longueur',
+            'width'          => 'Largeur',
+            'height'         => 'Hauteur',
+            'surface'        => 'Surface',
+            'volume'         => 'Volume',
+        ),
+        'Classification'  => array(
+            'fk_product_type' => 'Type produit (0=produit, 1=service)',
+            'finished'       => 'Nature (0=brut, 1=fini)',
+            'duration'       => 'Durée (services)',
+            'customcode'     => 'Code douanier',
+            'fk_country'     => 'Pays origine',
+            'packaging'      => 'Colisage',
+        ),
+    );
+
+    // Champs standard commande
+    $order_fields = array(
+        'En-tête commande' => array(
+            'rowid'          => 'ID commande',
+            'ref'            => 'Référence commande',
+            'ref_client'     => 'Référence client',
+            'date_commande'  => 'Date commande',
+            'date_valid'     => 'Date validation',
+            'date_cloture'   => 'Date clôture',
+            'total_ht'       => 'Total HT',
+            'total_tva'      => 'Total TVA',
+            'total_ttc'      => 'Total TTC',
+            'source'         => 'Source/canal',
+            'fk_statut'      => 'Statut',
+            'note_private'   => 'Note privée',
+            'note_public'    => 'Note publique',
+        ),
+        'Tiers'            => array(
+            'fk_soc'         => 'ID tiers',
+            'soc_nom'        => 'Nom tiers',
+            'soc_email'      => 'Email tiers',
+            'soc_phone'      => 'Téléphone tiers',
+            'soc_address'    => 'Adresse livraison',
+            'soc_zip'        => 'Code postal livraison',
+            'soc_town'       => 'Ville livraison',
+            'soc_country'    => 'Pays livraison',
+        ),
+        'Ligne de commande' => array(
+            'line_label'     => 'Libellé ligne',
+            'line_description' => 'Description ligne',
+            'line_qty'       => 'Quantité',
+            'line_subprice'  => 'Prix unitaire HT',
+            'line_total_ht'  => 'Total ligne HT',
+            'line_total_ttc' => 'Total ligne TTC',
+            'line_tva_tx'    => 'TVA ligne (%)',
+            'line_remise_percent' => 'Remise ligne (%)',
+            'line_product_ref' => 'Référence produit ligne',
+        ),
+    );
+
+    // Sélection selon le flux
+    $fields = array();
+    if (in_array($flow, array('product', 'price', 'stock'))) {
+        $fields = $product_fields;
+    } elseif ($flow === 'order') {
+        $fields = $order_fields;
+    }
+
+    // Ajouter les champs perso (extrafields) depuis la DB
+    $element_types = ($flow === 'order') ? array('commande', 'commandedet') : array('product');
+    $extra_group = array();
+    foreach ($element_types as $etype) {
+        $sql = "SELECT name, label, type FROM ".MAIN_DB_PREFIX."extrafields"
+             . " WHERE elementtype = '".$db->escape($etype)."'"
+             . " AND entity IN (0, ".(int)$GLOBALS['conf']->entity.")"
+             . " ORDER BY pos";
+        $res = $db->query($sql);
+        if ($res) {
+            while ($obj = $db->fetch_object($res)) {
+                $key   = 'options_'.$obj->name;
+                $label = $obj->label.' ('.$obj->type.')';
+                $extra_group[$key] = $label;
+            }
+        }
+    }
+    if (!empty($extra_group)) {
+        $fields['Champs personnalisés'] = $extra_group;
+    }
+
+    return $fields;
+}
+
 // ─── Chargement config en DB ──────────────────────────────────────────────────
 $db_config_raw = isset($conf->global->MARKETPLACE_BDC_MARKETPLACES) ? $conf->global->MARKETPLACE_BDC_MARKETPLACES : '{}';
 $db_marketplaces = json_decode($db_config_raw, true);
@@ -204,7 +323,7 @@ if ($action == 'storemkt' && $mkt_id) {
 // Ajouter un mapping pour un flux
 if ($action == 'newfield' && $mkt_id) {
     $flow     = GETPOST('flow',   'alpha');
-    $src      = GETPOST('msrc',  'alpha');
+    $src      = GETPOST('msrc',  'alphanohtml');
     $tgt      = GETPOST('mtgt',  'alpha');
     if ($flow && $src && $tgt) {
         if (!isset($db_marketplaces[$mkt_id])) { $db_marketplaces[$mkt_id] = array(); }
@@ -528,6 +647,16 @@ elseif ($tab == 'marketplaces') {
     print '</div>';
 
     $flow_rows = $merged_mappings[$cur_flow] ?? array();
+
+    // Construire index plat champ_key => label pour affichage
+    $all_field_groups = mkt_get_mapping_fields($db, $cur_flow);
+    $field_label_index = array();
+    foreach ($all_field_groups as $grp => $grp_fields) {
+        foreach ($grp_fields as $fk => $fl) {
+            $field_label_index[$fk] = $fl;
+        }
+    }
+
     print '<table class="noborder centpercent" style="margin-top:0;">';
     print '<tr class="liste_titre">';
     print '<th>Champ Dolibarr (source)</th><th>Champ Marketplace (cible)</th><th style="width:80px">Action</th>';
@@ -537,8 +666,10 @@ elseif ($tab == 'marketplaces') {
         print '<tr><td colspan="3" class="opacitymedium" style="padding:12px">Aucun mapping pour ce flux.</td></tr>';
     } else {
         foreach ($flow_rows as $idx => $row) {
+            $src_key   = htmlspecialchars($row['source']);
+            $src_label = isset($field_label_index[$row['source']]) ? htmlspecialchars($field_label_index[$row['source']]) : $src_key;
             print '<tr>';
-            print '<td><code>'.htmlspecialchars($row['source']).'</code></td>';
+            print '<td><span title="'.$src_key.'" style="cursor:help">'.$src_label.'</span> <code style="font-size:11px;color:#888">['.$src_key.']</code></td>';
             print '<td><code>'.htmlspecialchars($row['target']).'</code></td>';
             print '<td>';
             print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?tab=marketplaces&mkt='.urlencode($mkt_id).'&flow='.$cur_flow.'" style="display:inline">';
@@ -554,14 +685,26 @@ elseif ($tab == 'marketplaces') {
     }
 
     // Formulaire ajout mapping
+    $mapping_field_groups = mkt_get_mapping_fields($db, $cur_flow);
     print '<tr style="background:#f9f9f9">';
     print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?tab=marketplaces&mkt='.urlencode($mkt_id).'&flow='.$cur_flow.'">';
     print '<input type="hidden" name="token"  value="'.newToken().'">';
     print '<input type="hidden" name="action" value="newfield">';
     print '<input type="hidden" name="mkt"    value="'.htmlspecialchars($mkt_id).'">';
     print '<input type="hidden" name="flow"   value="'.$cur_flow.'">';
-    print '<td><input type="text" name="msrc" placeholder="ex: ref, price_ttc…" style="width:100%" required></td>';
-    print '<td><input type="text" name="mtgt" placeholder="ex: SellerProductId…" style="width:100%" required></td>';
+    print '<td>';
+    print '<select name="msrc" style="width:100%" required>';
+    print '<option value="">— Choisir un champ Dolibarr —</option>';
+    foreach ($mapping_field_groups as $group_label => $group_fields) {
+        print '<optgroup label="'.htmlspecialchars($group_label).'">';
+        foreach ($group_fields as $field_key => $field_label) {
+            print '<option value="'.htmlspecialchars($field_key).'">'.htmlspecialchars($field_label).' ['.$field_key.']</option>';
+        }
+        print '</optgroup>';
+    }
+    print '</select>';
+    print '</td>';
+    print '<td><input type="text" name="mtgt" placeholder="Champ marketplace (ex: SellerProductId)" style="width:100%" required></td>';
     print '<td><button type="submit" class="button button-sm">+ Ajouter</button></td>';
     print '</form>';
     print '</tr>';
