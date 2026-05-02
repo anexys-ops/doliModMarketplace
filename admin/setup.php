@@ -538,6 +538,15 @@ function mkt_get_mapping_fields($db, $flow)
             'fk_country'     => 'Pays origine',
             'packaging'      => 'Colisage',
         ),
+        'Images'          => array(
+            'image_main_url' => 'Image principale (URL)',
+            'image_url_1'    => 'Image 1 (URL)',
+            'image_url_2'    => 'Image 2 (URL)',
+            'image_url_3'    => 'Image 3 (URL)',
+            'image_url_4'    => 'Image 4 (URL)',
+            'image_url_5'    => 'Image 5 (URL)',
+            'images_count'   => 'Nombre d\'images',
+        ),
     );
 
     // Champs standard commande

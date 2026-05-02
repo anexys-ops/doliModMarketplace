@@ -97,9 +97,10 @@ if ($action == 'storeprodmkt' && $can_write) {
 
         $new_cfg[$mkt_id] = array(
             'synced'     => GETPOST('synced_'.$mkt_id) ? 1 : 0,
-            'sync_desc'  => GETPOST('sync_desc_'.$mkt_id) ? 1 : 0,
-            'sync_price' => GETPOST('sync_price_'.$mkt_id) ? 1 : 0,
-            'sync_stock' => GETPOST('sync_stock_'.$mkt_id) ? 1 : 0,
+            'sync_desc'   => GETPOST('sync_desc_'.$mkt_id) ? 1 : 0,
+            'sync_price'  => GETPOST('sync_price_'.$mkt_id) ? 1 : 0,
+            'sync_stock'  => GETPOST('sync_stock_'.$mkt_id) ? 1 : 0,
+            'sync_images' => GETPOST('sync_images_'.$mkt_id) ? 1 : 0,
             'adj_type'   => $adj_type,
             'adj_val'    => $adj_val,
             'stock_buf'  => (int) GETPOST('stock_buf_'.$mkt_id, 'int'),
@@ -169,9 +170,10 @@ function mkt_cfg($prod_config, $mkt_id, $key, $default = 0) {
         $mkt_name    = $mkt_info['name'] ?? $mkt_id;
         $mkt_enabled = !empty($mkt_info['enabled']);
         $synced      = (int) mkt_cfg($prod_config, $mkt_id, 'synced');
-        $sync_desc   = (int) mkt_cfg($prod_config, $mkt_id, 'sync_desc',  1);
-        $sync_price  = (int) mkt_cfg($prod_config, $mkt_id, 'sync_price', 1);
-        $sync_stock  = (int) mkt_cfg($prod_config, $mkt_id, 'sync_stock', 1);
+        $sync_desc   = (int) mkt_cfg($prod_config, $mkt_id, 'sync_desc',   1);
+        $sync_price  = (int) mkt_cfg($prod_config, $mkt_id, 'sync_price',  1);
+        $sync_stock  = (int) mkt_cfg($prod_config, $mkt_id, 'sync_stock',  1);
+        $sync_images = (int) mkt_cfg($prod_config, $mkt_id, 'sync_images', 1);
         $adj_type    =       mkt_cfg($prod_config, $mkt_id, 'adj_type',  'none');
         $adj_val     = (float) mkt_cfg($prod_config, $mkt_id, 'adj_val', 0);
         $stock_buf   = (int) mkt_cfg($prod_config, $mkt_id, 'stock_buf', 0);
@@ -224,6 +226,8 @@ function mkt_cfg($prod_config, $mkt_id, $key, $default = 0) {
 
             <div class="mkt-row">
                 <span class="mkt-label">Infos à envoyer</span>
+                <label><input type="checkbox" name="sync_images_<?php echo $mkt_id; ?>" value="1" <?php echo $sync_images ? 'checked' : ''; ?>>
+                    🖼 Images</label>
                 <label><input type="checkbox" name="sync_desc_<?php echo $mkt_id; ?>" value="1" <?php echo $sync_desc ? 'checked' : ''; ?>>
                     📝 Description</label>
                 <label><input type="checkbox" name="sync_price_<?php echo $mkt_id; ?>" value="1" <?php echo $sync_price ? 'checked' : ''; ?>

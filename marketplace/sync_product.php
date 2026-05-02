@@ -62,7 +62,25 @@ if ($product->fetch($product_id) <= 0) {
     exit;
 }
 $product->load_stock();
+$product->fetch_optionals();
 $stock_reel = (float) $product->stock_reel;
+
+// ── Images produit ────────────────────────────────────────────────────────────
+$product_images = array();
+$img_dir = (isset($conf->product->dir_output) ? $conf->product->dir_output : DOL_DATA_ROOT.'/produit')
+         . '/' . dol_sanitizeFileName($product->ref);
+if (is_dir($img_dir)) {
+    $files = @scandir($img_dir);
+    if ($files) {
+        foreach ($files as $f) {
+            if (preg_match('/\.(jpg|jpeg|png|gif|webp)$/i', $f) && strpos($f, 'thumbs') === false) {
+                $product_images[] = DOL_MAIN_URL_ROOT
+                    . '/viewimage.php?modulepart=product&entity='.(int)$conf->entity
+                    . '&file='.urlencode(dol_sanitizeFileName($product->ref).'/'.$f);
+            }
+        }
+    }
+}
 
 // ── Chargement configs ────────────────────────────────────────────────────────
 $all_mkt_raw = isset($conf->global->MARKETPLACE_BDC_MARKETPLACES) ? $conf->global->MARKETPLACE_BDC_MARKETPLACES : '{}';
@@ -124,29 +142,59 @@ foreach ($targets as $mkt_id => $mkt_info) {
 
     // Payload avec les champs Dolibarr disponibles
     $dolibarr_fields = array(
-        'ref'         => $product->ref,
-        'ref_ext'     => $product->ref_ext,
-        'label'       => $product->label,
-        'description' => strip_tags($product->description),
-        'barcode'     => $product->barcode,
-        'weight'      => $product->weight,
-        'length'      => $product->length,
-        'width'       => $product->width,
-        'height'      => $product->height,
-        'price_ttc'   => $final_price,
-        'price'       => $product->price,
-        'price_min'   => $product->price_min,
-        'price_min_ttc' => $product->price_min_ttc,
-        'stock_reel'  => $final_stock,
-        'tva_tx'      => $product->tva_tx,
-        'cost_price'  => $product->cost_price,
-        'customcode'  => $product->customcode,
-        'url'         => $product->url,
-        'finished'    => $product->finished,
-        'packaging'   => $product->packaging,
+        // Identification
+        'ref'             => $product->ref,
+        'ref_ext'         => $product->ref_ext,
+        'barcode'         => $product->barcode,
+        'label'           => $product->label,
+        // Description
+        'description'     => strip_tags($product->description),
+        'note_public'     => strip_tags($product->note),
+        'url'             => $product->url,
+        // Prix
+        'price_ttc'       => $final_price,
+        'price'           => $product->price,
+        'price_min'       => $product->price_min,
+        'price_min_ttc'   => $product->price_min_ttc,
+        'cost_price'      => $product->cost_price,
+        'tva_tx'          => $product->tva_tx,
+        // Stock / logistique
+        'stock_reel'      => $final_stock,
+        'desiredstock'    => $product->desiredstock,
+        'weight'          => $product->weight,
+        'length'          => $product->length,
+        'width'           => $product->width,
+        'height'          => $product->height,
+        'surface'         => $product->surface,
+        'volume'          => $product->volume,
+        // Classification
+        'customcode'      => $product->customcode,
+        'finished'        => $product->finished,
+        'packaging'       => $product->packaging,
+        // Images
+        'image_main_url'  => !empty($product_images) ? $product_images[0] : '',
+        'image_url_1'     => $product_images[0] ?? '',
+        'image_url_2'     => $product_images[1] ?? '',
+        'image_url_3'     => $product_images[2] ?? '',
+        'image_url_4'     => $product_images[3] ?? '',
+        'image_url_5'     => $product_images[4] ?? '',
+        'images_count'    => count($product_images),
     );
 
+    // Champs personnalisés (extrafields)
+    if (!empty($product->array_options)) {
+        foreach ($product->array_options as $opt_key => $opt_val) {
+            // $opt_key est déjà de la forme 'options_xxx'
+            $dolibarr_fields[$opt_key] = $opt_val;
+        }
+    }
+
     // Construction du payload via mappings
+    $sync_desc   = !isset($pcfg['sync_desc'])   || !empty($pcfg['sync_desc']);
+    $sync_price  = !isset($pcfg['sync_price'])  || !empty($pcfg['sync_price']);
+    $sync_stock  = !isset($pcfg['sync_stock'])  || !empty($pcfg['sync_stock']);
+    $sync_images = !isset($pcfg['sync_images']) || !empty($pcfg['sync_images']);
+
     $payload = array('_source_ref' => $product->ref, '_source_id' => $product_id);
     foreach (array('product', 'price', 'stock') as $flow) {
         if (!empty($mkt_maps[$flow])) {
@@ -155,9 +203,15 @@ foreach ($targets as $mkt_id => $mkt_info) {
                 $tgt = $mapping['target'] ?? '';
                 if (!$src || !$tgt) { continue; }
                 if (!array_key_exists($src, $dolibarr_fields)) { continue; }
-                if ($flow === 'price' && !empty($pcfg['sync_price']) === false && isset($pcfg['sync_price'])) { continue; }
-                if ($flow === 'stock' && !empty($pcfg['sync_stock']) === false && isset($pcfg['sync_stock'])) { continue; }
-                if ($flow === 'product' && empty($pcfg['sync_desc']) && in_array($src, array('description', 'label'))) { continue; }
+
+                // Respect des flags de sync
+                if ($flow === 'price' && !$sync_price) { continue; }
+                if ($flow === 'stock' && !$sync_stock) { continue; }
+                if ($flow === 'product') {
+                    if (!$sync_desc && in_array($src, array('description', 'note_public', 'label', 'url'))) { continue; }
+                    if (!$sync_images && strpos($src, 'image') === 0) { continue; }
+                }
+
                 $payload[$tgt] = $dolibarr_fields[$src];
             }
         }
