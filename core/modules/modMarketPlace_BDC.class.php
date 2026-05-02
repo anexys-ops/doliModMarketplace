@@ -44,7 +44,7 @@ class modMarketPlace_BDC extends DolibarrModules
         $this->name = preg_replace('/^mod/i', '', get_class($this));
 
         // Description
-        $this->description = 'MarketPlace Manager - Gestion des offres produits sur les places de marché (ADEO, Cdiscount, Amazon)';
+        $this->description = 'Synchronisation produits, prix, stocks et commandes vers 19 marketplaces (Amazon, Cdiscount, Fnac, ManoMano, TikTok Shop, Zalando…)';
 
         // Version
         $this->version = '1.3.0';
