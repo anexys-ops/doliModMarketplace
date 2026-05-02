@@ -138,11 +138,15 @@ $db_config_raw = isset($conf->global->MARKETPLACE_BDC_MARKETPLACES) ? $conf->glo
 $db_marketplaces = json_decode($db_config_raw, true);
 if (!is_array($db_marketplaces)) { $db_marketplaces = array(); }
 
-// Merge defaults avec DB (DB prioritaire)
+// Merge defaults avec DB (DB prioritaire sauf si la valeur DB est vide string)
 $marketplaces = $default_marketplaces;
 foreach ($db_marketplaces as $k => $v) {
     if (isset($marketplaces[$k])) {
-        $marketplaces[$k] = array_merge($marketplaces[$k], $v);
+        foreach ($v as $field => $val) {
+            if ($val !== '' || !isset($marketplaces[$k][$field])) {
+                $marketplaces[$k][$field] = $val;
+            }
+        }
     } else {
         $marketplaces[$k] = $v;
     }
@@ -165,7 +169,10 @@ if ($action == 'savegeneral') {
 // Sauvegarde config d'une marketplace
 if ($action == 'storemkt' && $mkt_id) {
     if (!isset($db_marketplaces[$mkt_id])) { $db_marketplaces[$mkt_id] = array(); }
-    $db_marketplaces[$mkt_id]['name']          = GETPOST('mkt_name', 'string');
+    $new_name = GETPOST('mkt_name', 'string');
+    if ($new_name !== '') {
+        $db_marketplaces[$mkt_id]['name'] = $new_name;
+    }
     $db_marketplaces[$mkt_id]['enabled']       = GETPOST('mkt_enabled') ? 1 : 0;
     $db_marketplaces[$mkt_id]['auth_type']     = GETPOST('mkt_auth_type', 'alpha');
     $db_marketplaces[$mkt_id]['client_id']     = GETPOST('mkt_client_id', 'string');
@@ -287,7 +294,15 @@ $db_marketplaces = json_decode($db_config_raw, true);
 if (!is_array($db_marketplaces)) { $db_marketplaces = array(); }
 $marketplaces = $default_marketplaces;
 foreach ($db_marketplaces as $k => $v) {
-    $marketplaces[$k] = isset($marketplaces[$k]) ? array_merge($marketplaces[$k], $v) : $v;
+    if (isset($marketplaces[$k])) {
+        foreach ($v as $field => $val) {
+            if ($val !== '' || !isset($marketplaces[$k][$field])) {
+                $marketplaces[$k][$field] = $val;
+            }
+        }
+    } else {
+        $marketplaces[$k] = $v;
+    }
 }
 $enable_sync    = isset($conf->global->MARKETPLACE_BDC_ENABLE_SYNC)    ? $conf->global->MARKETPLACE_BDC_ENABLE_SYNC    : '0';
 $auto_sync_time = isset($conf->global->MARKETPLACE_BDC_AUTO_SYNC_TIME) ? $conf->global->MARKETPLACE_BDC_AUTO_SYNC_TIME : '3600';
