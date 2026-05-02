@@ -196,7 +196,65 @@ class modMarketPlace_BDC extends DolibarrModules
             'user'     => 2,
         );
 
-        return $this->_init(array(), $options);
+        $result = $this->_init(array(), $options);
+
+        if ($result) {
+            $this->_autoGrantAdminRights();
+        }
+
+        return $result;
+    }
+
+    /**
+     * Attribue automatiquement tous les droits du module aux utilisateurs admin
+     */
+    private function _autoGrantAdminRights()
+    {
+        global $conf;
+
+        $entity = (int) $conf->entity;
+
+        // Récupérer tous les utilisateurs admin
+        $sqlAdmins = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'user'
+            .' WHERE admin = 1 AND entity IN (0, '.$entity.')';
+        $resAdmins = $this->db->query($sqlAdmins);
+        if (!$resAdmins) {
+            return;
+        }
+
+        // Récupérer tous les IDs de droits du module
+        $sqlRights = 'SELECT id FROM '.MAIN_DB_PREFIX.'rights_def'
+            ." WHERE module = 'marketplace_bdc' AND entity = ".$entity;
+        $resRights = $this->db->query($sqlRights);
+        if (!$resRights) {
+            return;
+        }
+
+        $rightIds = array();
+        while ($objR = $this->db->fetch_object($resRights)) {
+            $rightIds[] = (int) $objR->id;
+        }
+
+        if (empty($rightIds)) {
+            return;
+        }
+
+        while ($objU = $this->db->fetch_object($resAdmins)) {
+            $userId = (int) $objU->rowid;
+            foreach ($rightIds as $rightId) {
+                $sqlCheck = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'user_rights'
+                    .' WHERE fk_user = '.$userId
+                    .' AND fk_id = '.$rightId
+                    .' AND entity = '.$entity;
+                $resCheck = $this->db->query($sqlCheck);
+                if ($resCheck && $this->db->num_rows($resCheck) == 0) {
+                    $sqlIns = 'INSERT INTO '.MAIN_DB_PREFIX.'user_rights'
+                        .' (entity, fk_user, fk_id)'
+                        .' VALUES ('.$entity.', '.$userId.', '.$rightId.')';
+                    $this->db->query($sqlIns);
+                }
+            }
+        }
     }
 
     /**
