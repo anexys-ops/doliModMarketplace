@@ -111,8 +111,10 @@ class modMarketPlace_BDC extends DolibarrModules
         // Menus (initialized in init())
         $this->menu = array();
 
-        // Tabs (initialized in init())
-        $this->tabs = array();
+        // Tabs - Product Card
+        $this->tabs = array(
+            'product:+marketplaces:Marketplaces:marketplace_bdc@marketplace_bdc:1:/custom/marketplace_bdc/marketplace/product_tab.php?id=__ID__',
+        );
 
         // Triggers
         $this->triggers = array();
@@ -157,11 +159,6 @@ class modMarketPlace_BDC extends DolibarrModules
         $this->rights[$r][4] = 'marketplace';
         $this->rights[$r][5] = 'admin';
         $r++;
-
-        // Tabs - Product Card
-        $this->tabs = array(
-            'product:+marketplaces:Marketplaces:marketplace_bdc@marketplace_bdc:1:/custom/marketplace_bdc/marketplace/product_tab.php?id=__ID__',
-        );
 
         // Menu entries
         $this->menu = array();
