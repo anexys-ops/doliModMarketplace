@@ -49,13 +49,35 @@ $all_mkt_raw = isset($conf->global->MARKETPLACE_BDC_MARKETPLACES) ? $conf->globa
 $all_mkt     = json_decode($all_mkt_raw, true);
 if (!is_array($all_mkt)) { $all_mkt = array(); }
 
-// Marketplaces par défaut si pas encore configurées
-$defaults = array('cdiscount' => 'Cdiscount', 'mirakl_adeo' => 'Mirakl ADEO', 'amazon' => 'Amazon SP-API');
-foreach ($defaults as $kid => $kname) {
-    if (!isset($all_mkt[$kid])) {
-        $all_mkt[$kid] = array('name' => $kname, 'enabled' => 0);
+// Noms par défaut pour les marketplaces connues (si le nom est absent en DB)
+$mkt_name_defaults = array(
+    'cdiscount'            => 'Cdiscount',
+    'mirakl_adeo'          => 'Leroy Merlin (ADEO)',
+    'amazon'               => 'Amazon SP-API (EU)',
+    'ebay'                 => 'eBay (FR)',
+    'rakuten'              => 'Rakuten (FR)',
+    'tiktok_shop'          => 'TikTok Shop',
+    'leboncoin'            => 'Leboncoin Pro',
+    'mirakl_fnac'          => 'Fnac Marketplace',
+    'mirakl_darty'         => 'Darty Marketplace',
+    'mirakl_manomano'      => 'ManoMano',
+    'mirakl_laredoute'     => 'La Redoute',
+    'mirakl_carrefour'     => 'Carrefour Marketplace',
+    'mirakl_boulanger'     => 'Boulanger Marketplace',
+    'mirakl_auchan'        => 'Auchan Marketplace',
+    'mirakl_conforama'     => 'Conforama Marketplace',
+    'mirakl_rueducommerce' => 'Rue du Commerce',
+    'zalando'              => 'Zalando (ZEOS)',
+    'veepee'               => 'Veepee',
+    'showroomprive'        => 'Showroomprivé',
+);
+// Compléter les noms vides depuis les défauts
+foreach ($all_mkt as $kid => &$kdata) {
+    if (empty($kdata['name']) && isset($mkt_name_defaults[$kid])) {
+        $kdata['name'] = $mkt_name_defaults[$kid];
     }
 }
+unset($kdata);
 
 $prod_key    = 'MARKETPLACE_BDC_PRODUCT_'.$id;
 $prod_raw    = isset($conf->global->$prod_key) ? $conf->global->$prod_key : '{}';
@@ -63,7 +85,10 @@ $prod_config = json_decode($prod_raw, true);
 if (!is_array($prod_config)) { $prod_config = array(); }
 
 // ── ACTION : Sauvegarde ───────────────────────────────────────────────────────
-if ($action == 'storeprodmkt' && $user->hasRight('marketplace_bdc', 'marketplace', 'write')) {
+$can_write = $user->admin || (!empty($user->rights->marketplace_bdc->marketplace->write));
+$can_sync  = $user->admin || (!empty($user->rights->marketplace_bdc->marketplace->sync));
+
+if ($action == 'storeprodmkt' && $can_write) {
     $new_cfg = array();
     foreach ($all_mkt as $mkt_id => $mkt_info) {
         $adj_type = GETPOST('adj_type_'.$mkt_id, 'alpha') ?: 'none';
@@ -241,7 +266,7 @@ function mkt_cfg($prod_config, $mkt_id, $key, $default = 0) {
     </div><!-- /mkt-panel -->
     <?php endforeach; ?>
 
-    <?php if ($user->hasRight('marketplace_bdc', 'marketplace', 'write')): ?>
+    <?php if ($can_write): ?>
     <div class="tabsAction">
         <button type="submit" class="button button-primary">💾 Sauvegarder la configuration</button>
     </div>
@@ -252,7 +277,7 @@ function mkt_cfg($prod_config, $mkt_id, $key, $default = 0) {
 
 <?php
 // ── Section synchronisation forcée ────────────────────────────────────────────
-if ($user->hasRight('marketplace_bdc', 'marketplace', 'sync') && !empty($all_mkt)):
+if ($can_sync && !empty($all_mkt)):
     $mkt_enabled_all = array();
     foreach ($all_mkt as $kid => $kinfo) {
         if (!empty($kinfo['enabled'])) {
