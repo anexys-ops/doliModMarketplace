@@ -47,7 +47,7 @@ class modMarketPlace_BDC extends DolibarrModules
         $this->description = 'MarketPlace Manager - Gestion des offres produits sur les places de marché (ADEO, Cdiscount, Amazon)';
 
         // Version
-        $this->version = '1.2.0';
+        $this->version = '1.3.0';
 
         // Clé dans llx_const
         $this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
