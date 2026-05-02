@@ -35,7 +35,7 @@ if (!$user->admin) { accessforbidden(); }
 
 // ─── Paramètres URL ──────────────────────────────────────────────────────────
 $action     = GETPOST('action', 'aZ09');
-$tab        = GETPOST('tab', 'alpha') ?: 'general';
+$tab        = GETPOST('tab', 'alpha') ?: 'marketplaces';
 $mkt_id     = GETPOST('mkt', 'alpha');   // marketplace sélectionnée
 
 // ─── Structure par défaut des marketplaces ───────────────────────────────────
@@ -442,8 +442,8 @@ print load_fiche_titre('Module Marketplace BDC — Configuration', '', 'setup');
 
 // Tabs principaux
 $head = array(
+    array($_SERVER['PHP_SELF'].'?tab=marketplaces', 'Marketplaces',        'marketplaces'),
     array($_SERVER['PHP_SELF'].'?tab=general',      'Paramètres Généraux', 'general'),
-    array($_SERVER['PHP_SELF'].'?tab=marketplaces', 'Marketplaces',         'marketplaces'),
 );
 
 print dol_get_fiche_head($head, $tab, '', -1);
