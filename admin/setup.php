@@ -39,98 +39,458 @@ $tab        = GETPOST('tab', 'alpha') ?: 'marketplaces';
 $mkt_id     = GETPOST('mkt', 'alpha');   // marketplace sélectionnée
 
 // ─── Structure par défaut des marketplaces ───────────────────────────────────
+// Mappings Mirakl standard (identiques pour toutes les plateformes Mirakl)
+$_mirakl_mappings = array(
+    'product' => array(
+        array('source' => 'ref',          'target' => 'sku'),
+        array('source' => 'label',        'target' => 'title'),
+        array('source' => 'description',  'target' => 'description'),
+        array('source' => 'barcode',      'target' => 'ean'),
+        array('source' => 'weight',       'target' => 'package-weight'),
+        array('source' => 'length',       'target' => 'package-length'),
+        array('source' => 'width',        'target' => 'package-width'),
+        array('source' => 'height',       'target' => 'package-height'),
+    ),
+    'price' => array(
+        array('source' => 'price_ttc',    'target' => 'price'),
+        array('source' => 'tva_tx',       'target' => 'tax_rate'),
+        array('source' => 'price_min',    'target' => 'discount-price'),
+    ),
+    'stock' => array(
+        array('source' => 'stock_reel',   'target' => 'quantity'),
+    ),
+    'order' => array(
+        array('source' => 'ref',          'target' => 'order_line_id'),
+        array('source' => 'ref_client',   'target' => 'customer_order_id'),
+        array('source' => 'line_qty',     'target' => 'quantity'),
+        array('source' => 'line_subprice','target' => 'unit_price'),
+    ),
+);
+
 $default_marketplaces = array(
-    'cdiscount' => array(
-        'name'        => 'Cdiscount',
-        'enabled'     => 0,
-        'auth_type'   => 'oauth2',
-        'client_id'   => 'LuxGreenApiCdiscount',
-        'client_secret' => 'YlXszv0hpB86bwZSXkyHYvL7RX3s0fIa',
-        'endpoints'   => array(
-            'api'  => 'https://api.cdiscount.com/api/1.0',
-            'auth' => 'https://api.cdiscount.com/api/1.0/auth/GenerateToken',
-        ),
-        'mappings' => array(
-            'product' => array(
-                array('source' => 'ref',           'target' => 'SellerProductId'),
-                array('source' => 'label',         'target' => 'LongLabel'),
-                array('source' => 'description',   'target' => 'Description'),
-                array('source' => 'barcode',       'target' => 'Ean'),
-                array('source' => 'weight',        'target' => 'Weight'),
-            ),
-            'price'   => array(
-                array('source' => 'price_ttc',     'target' => 'Price'),
-                array('source' => 'price',         'target' => 'EcoTax'),
-            ),
-            'stock'   => array(
-                array('source' => 'stock_reel',    'target' => 'StockQuantity'),
-            ),
-            'order'   => array(
-                array('source' => 'ref_client',    'target' => 'CustomerOrderNumber'),
-            ),
-        ),
-    ),
-    'mirakl_adeo' => array(
-        'name'      => 'Mirakl ADEO',
-        'enabled'   => 0,
-        'auth_type' => 'apikey',
-        'api_key'   => 'd93a0347-3645-41ff-98d0-8837017a1bfa',
-        'endpoints' => array(
-            'api' => 'https://adeo-marketplace.mirakl.net/api',
-        ),
-        'mappings' => array(
-            'product' => array(
-                array('source' => 'ref',         'target' => 'sku'),
-                array('source' => 'label',       'target' => 'title'),
-                array('source' => 'description', 'target' => 'description'),
-                array('source' => 'barcode',     'target' => 'ean'),
-            ),
-            'price'   => array(
-                array('source' => 'price_ttc',   'target' => 'price'),
-                array('source' => 'tva_tx',      'target' => 'tax_rate'),
-            ),
-            'stock'   => array(
-                array('source' => 'stock_reel',  'target' => 'quantity'),
-            ),
-            'order'   => array(
-                array('source' => 'ref',         'target' => 'order_line_id'),
-            ),
-        ),
-    ),
+
+    // ── Amazon ────────────────────────────────────────────────────────────────
     'amazon' => array(
-        'name'          => 'Amazon SP-API (EU)',
-        'enabled'       => 0,
-        'auth_type'     => 'oauth2_lwa',
-        'seller_id'     => 'A3EH3LRP5DO8KW',
-        'marketplace_id'=> 'A13V1IB3VIYZZH',
-        'client_id'     => 'amzn1.application-oa2-client.9d11c3172c03474090f53b3f127d8759',
-        'client_secret' => '',
-        'refresh_token' => '',
-        'endpoints'     => array(
+        'name'           => 'Amazon SP-API (EU)',
+        'enabled'        => 0,
+        'auth_type'      => 'oauth2_lwa',
+        'seller_id'      => 'A3EH3LRP5DO8KW',
+        'marketplace_id' => 'A13V1IB3VIYZZH',
+        'client_id'      => 'amzn1.application-oa2-client.9d11c3172c03474090f53b3f127d8759',
+        'client_secret'  => '',
+        'refresh_token'  => '',
+        'endpoints'      => array(
             'api'     => 'https://sellingpartnerapi-eu.amazon.com',
             'auth'    => 'https://api.amazon.com/auth/o2/token',
             'sandbox' => 'https://sandbox.sellingpartnerapi-eu.amazon.com',
         ),
         'mappings' => array(
             'product' => array(
-                array('source' => 'ref',         'target' => 'sku'),
-                array('source' => 'label',       'target' => 'item_name'),
-                array('source' => 'barcode',     'target' => 'external_product_id'),
-                array('source' => 'description', 'target' => 'product_description'),
+                array('source' => 'ref',          'target' => 'sku'),
+                array('source' => 'label',        'target' => 'item_name'),
+                array('source' => 'barcode',      'target' => 'external_product_id'),
+                array('source' => 'description',  'target' => 'product_description'),
+                array('source' => 'weight',       'target' => 'item_weight'),
             ),
-            'price'   => array(
-                array('source' => 'price_ttc',   'target' => 'standard_price'),
-                array('source' => 'price',       'target' => 'business_price'),
+            'price' => array(
+                array('source' => 'price_ttc',    'target' => 'standard_price'),
+                array('source' => 'price',        'target' => 'business_price'),
             ),
-            'stock'   => array(
-                array('source' => 'stock_reel',  'target' => 'quantity'),
-                array('source' => 'stock_min',   'target' => 'fulfillment_latency'),
+            'stock' => array(
+                array('source' => 'stock_reel',   'target' => 'quantity'),
             ),
-            'order'   => array(
-                array('source' => 'ref_client',  'target' => 'buyer_order_id'),
+            'order' => array(
+                array('source' => 'ref_client',   'target' => 'buyer_order_id'),
+                array('source' => 'line_qty',     'target' => 'quantity-purchased'),
+                array('source' => 'line_subprice','target' => 'item-price'),
             ),
         ),
     ),
+
+    // ── Cdiscount ─────────────────────────────────────────────────────────────
+    'cdiscount' => array(
+        'name'         => 'Cdiscount',
+        'enabled'      => 0,
+        'auth_type'    => 'oauth2',
+        'client_id'    => 'LuxGreenApiCdiscount',
+        'client_secret'=> 'YlXszv0hpB86bwZSXkyHYvL7RX3s0fIa',
+        'endpoints'    => array(
+            'api'  => 'https://api.cdiscount.com/api/1.0',
+            'auth' => 'https://api.cdiscount.com/api/1.0/auth/GenerateToken',
+        ),
+        'mappings' => array(
+            'product' => array(
+                array('source' => 'ref',          'target' => 'SellerProductId'),
+                array('source' => 'label',        'target' => 'LongLabel'),
+                array('source' => 'description',  'target' => 'Description'),
+                array('source' => 'barcode',      'target' => 'Ean'),
+                array('source' => 'weight',       'target' => 'Weight'),
+            ),
+            'price' => array(
+                array('source' => 'price_ttc',    'target' => 'Price'),
+                array('source' => 'price',        'target' => 'EcoTax'),
+            ),
+            'stock' => array(
+                array('source' => 'stock_reel',   'target' => 'StockQuantity'),
+            ),
+            'order' => array(
+                array('source' => 'ref_client',   'target' => 'CustomerOrderNumber'),
+                array('source' => 'line_qty',     'target' => 'Quantity'),
+                array('source' => 'line_subprice','target' => 'UnitSalePrice'),
+            ),
+        ),
+    ),
+
+    // ── eBay ──────────────────────────────────────────────────────────────────
+    'ebay' => array(
+        'name'         => 'eBay (FR)',
+        'enabled'      => 0,
+        'auth_type'    => 'oauth2',
+        'client_id'    => '',
+        'client_secret'=> '',
+        'refresh_token'=> '',
+        'endpoints'    => array(
+            'api'     => 'https://api.ebay.com/sell/inventory/v1',
+            'auth'    => 'https://api.ebay.com/identity/v1/oauth2/token',
+            'sandbox' => 'https://api.sandbox.ebay.com/sell/inventory/v1',
+        ),
+        'mappings' => array(
+            'product' => array(
+                array('source' => 'ref',          'target' => 'sku'),
+                array('source' => 'label',        'target' => 'title'),
+                array('source' => 'description',  'target' => 'description'),
+                array('source' => 'barcode',      'target' => 'ean'),
+                array('source' => 'weight',       'target' => 'weight.value'),
+            ),
+            'price' => array(
+                array('source' => 'price_ttc',    'target' => 'value'),
+                array('source' => 'price',        'target' => 'originalRetailPrice.value'),
+            ),
+            'stock' => array(
+                array('source' => 'stock_reel',   'target' => 'quantity'),
+            ),
+            'order' => array(
+                array('source' => 'ref',          'target' => 'lineItemId'),
+                array('source' => 'line_qty',     'target' => 'quantity'),
+                array('source' => 'line_subprice','target' => 'lineItemCost.value'),
+            ),
+        ),
+    ),
+
+    // ── Rakuten (Priceminister) ───────────────────────────────────────────────
+    'rakuten' => array(
+        'name'      => 'Rakuten (FR)',
+        'enabled'   => 0,
+        'auth_type' => 'apikey',
+        'api_key'   => '',
+        'endpoints' => array(
+            'api'  => 'https://ws.fr.shopping.rakuten.com/merchant_webservices/s/open_api',
+            'auth' => 'https://fr.shopping.rakuten.com/oauth/token',
+        ),
+        'mappings' => array(
+            'product' => array(
+                array('source' => 'ref',          'target' => 'reference'),
+                array('source' => 'label',        'target' => 'headline'),
+                array('source' => 'description',  'target' => 'body'),
+                array('source' => 'barcode',      'target' => 'ean'),
+            ),
+            'price' => array(
+                array('source' => 'price_ttc',    'target' => 'price'),
+            ),
+            'stock' => array(
+                array('source' => 'stock_reel',   'target' => 'stock'),
+            ),
+            'order' => array(
+                array('source' => 'ref_client',   'target' => 'purchaseorderid'),
+                array('source' => 'line_qty',     'target' => 'quantity'),
+            ),
+        ),
+    ),
+
+    // ── TikTok Shop ───────────────────────────────────────────────────────────
+    'tiktok_shop' => array(
+        'name'         => 'TikTok Shop',
+        'enabled'      => 0,
+        'auth_type'    => 'oauth2',
+        'app_key'      => '',
+        'app_secret'   => '',
+        'access_token' => '',
+        'shop_id'      => '',
+        'endpoints'    => array(
+            'api'  => 'https://open-api.tiktokglobalshop.com',
+            'auth' => 'https://auth.tiktok-shops.com/api/v2/token/get',
+        ),
+        'mappings' => array(
+            'product' => array(
+                array('source' => 'ref',          'target' => 'seller_sku'),
+                array('source' => 'label',        'target' => 'title'),
+                array('source' => 'description',  'target' => 'description'),
+                array('source' => 'barcode',      'target' => 'identifier_code.code'),
+                array('source' => 'weight',       'target' => 'package_weight.value'),
+            ),
+            'price' => array(
+                array('source' => 'price_ttc',    'target' => 'price.amount'),
+                array('source' => 'price',        'target' => 'original_price.amount'),
+            ),
+            'stock' => array(
+                array('source' => 'stock_reel',   'target' => 'quantity'),
+            ),
+            'order' => array(
+                array('source' => 'ref',          'target' => 'order_line_id'),
+                array('source' => 'line_qty',     'target' => 'quantity'),
+                array('source' => 'line_subprice','target' => 'sale_price.amount'),
+            ),
+        ),
+    ),
+
+    // ── Leboncoin Pro ─────────────────────────────────────────────────────────
+    'leboncoin' => array(
+        'name'         => 'Leboncoin Pro',
+        'enabled'      => 0,
+        'auth_type'    => 'oauth2',
+        'client_id'    => '',
+        'client_secret'=> '',
+        'store_id'     => '',
+        'endpoints'    => array(
+            'api'  => 'https://api.leboncoin.fr/api/stores/v1',
+            'auth' => 'https://api.leboncoin.fr/oauth2/v1/token',
+        ),
+        'mappings' => array(
+            'product' => array(
+                array('source' => 'ref',          'target' => 'reference'),
+                array('source' => 'label',        'target' => 'subject'),
+                array('source' => 'description',  'target' => 'body'),
+                array('source' => 'barcode',      'target' => 'gtin'),
+            ),
+            'price' => array(
+                array('source' => 'price_ttc',    'target' => 'price'),
+            ),
+            'stock' => array(
+                array('source' => 'stock_reel',   'target' => 'stock_count'),
+            ),
+            'order' => array(
+                array('source' => 'ref_client',   'target' => 'buyer_id'),
+            ),
+        ),
+    ),
+
+    // ── Fnac (Mirakl) ─────────────────────────────────────────────────────────
+    'mirakl_fnac' => array(
+        'name'      => 'Fnac Marketplace',
+        'enabled'   => 0,
+        'auth_type' => 'apikey',
+        'api_key'   => '',
+        'endpoints' => array(
+            'api' => 'https://fnac-marketplace.mirakl.net/api',
+        ),
+        'mappings' => $_mirakl_mappings,
+    ),
+
+    // ── Darty (Mirakl) ────────────────────────────────────────────────────────
+    'mirakl_darty' => array(
+        'name'      => 'Darty Marketplace',
+        'enabled'   => 0,
+        'auth_type' => 'apikey',
+        'api_key'   => '',
+        'endpoints' => array(
+            'api' => 'https://darty.mirakl.net/api',
+        ),
+        'mappings' => $_mirakl_mappings,
+    ),
+
+    // ── ManoMano (Mirakl) ─────────────────────────────────────────────────────
+    'mirakl_manomano' => array(
+        'name'      => 'ManoMano',
+        'enabled'   => 0,
+        'auth_type' => 'apikey',
+        'api_key'   => '',
+        'endpoints' => array(
+            'api' => 'https://mano.mirakl.net/api',
+        ),
+        'mappings' => $_mirakl_mappings,
+    ),
+
+    // ── La Redoute (Mirakl) ───────────────────────────────────────────────────
+    'mirakl_laredoute' => array(
+        'name'      => 'La Redoute',
+        'enabled'   => 0,
+        'auth_type' => 'apikey',
+        'api_key'   => '',
+        'endpoints' => array(
+            'api' => 'https://la-redoute-marketplace.mirakl.net/api',
+        ),
+        'mappings' => $_mirakl_mappings,
+    ),
+
+    // ── Carrefour (Mirakl) ────────────────────────────────────────────────────
+    'mirakl_carrefour' => array(
+        'name'      => 'Carrefour Marketplace',
+        'enabled'   => 0,
+        'auth_type' => 'apikey',
+        'api_key'   => '',
+        'endpoints' => array(
+            'api' => 'https://carrefour-marketplace.mirakl.net/api',
+        ),
+        'mappings' => $_mirakl_mappings,
+    ),
+
+    // ── Boulanger (Mirakl) ────────────────────────────────────────────────────
+    'mirakl_boulanger' => array(
+        'name'      => 'Boulanger Marketplace',
+        'enabled'   => 0,
+        'auth_type' => 'apikey',
+        'api_key'   => '',
+        'endpoints' => array(
+            'api' => 'https://boulanger.mirakl.net/api',
+        ),
+        'mappings' => $_mirakl_mappings,
+    ),
+
+    // ── ADEO / Leroy Merlin (Mirakl) ──────────────────────────────────────────
+    'mirakl_adeo' => array(
+        'name'      => 'Leroy Merlin (ADEO)',
+        'enabled'   => 0,
+        'auth_type' => 'apikey',
+        'api_key'   => 'd93a0347-3645-41ff-98d0-8837017a1bfa',
+        'endpoints' => array(
+            'api' => 'https://adeo-marketplace.mirakl.net/api',
+        ),
+        'mappings' => $_mirakl_mappings,
+    ),
+
+    // ── Auchan (Mirakl) ───────────────────────────────────────────────────────
+    'mirakl_auchan' => array(
+        'name'      => 'Auchan Marketplace',
+        'enabled'   => 0,
+        'auth_type' => 'apikey',
+        'api_key'   => '',
+        'endpoints' => array(
+            'api' => 'https://auchan.mirakl.net/api',
+        ),
+        'mappings' => $_mirakl_mappings,
+    ),
+
+    // ── Conforama (Mirakl) ────────────────────────────────────────────────────
+    'mirakl_conforama' => array(
+        'name'      => 'Conforama Marketplace',
+        'enabled'   => 0,
+        'auth_type' => 'apikey',
+        'api_key'   => '',
+        'endpoints' => array(
+            'api' => 'https://conforama.mirakl.net/api',
+        ),
+        'mappings' => $_mirakl_mappings,
+    ),
+
+    // ── Rue du Commerce (Mirakl) ──────────────────────────────────────────────
+    'mirakl_rueducommerce' => array(
+        'name'      => 'Rue du Commerce',
+        'enabled'   => 0,
+        'auth_type' => 'apikey',
+        'api_key'   => '',
+        'endpoints' => array(
+            'api' => 'https://seller.rueducommerce.fr/api',
+        ),
+        'mappings' => $_mirakl_mappings,
+    ),
+
+    // ── Zalando (ZEOS) ────────────────────────────────────────────────────────
+    'zalando' => array(
+        'name'         => 'Zalando (ZEOS)',
+        'enabled'      => 0,
+        'auth_type'    => 'oauth2',
+        'client_id'    => '',
+        'client_secret'=> '',
+        'endpoints'    => array(
+            'api'  => 'https://api.merchants.zalando.com',
+            'auth' => 'https://api.merchants.zalando.com/auth/token',
+        ),
+        'mappings' => array(
+            'product' => array(
+                array('source' => 'ref',          'target' => 'sku'),
+                array('source' => 'label',        'target' => 'name'),
+                array('source' => 'description',  'target' => 'description'),
+                array('source' => 'barcode',      'target' => 'ean'),
+                array('source' => 'weight',       'target' => 'weight.amount'),
+            ),
+            'price' => array(
+                array('source' => 'price_ttc',    'target' => 'retail_price.amount'),
+                array('source' => 'price',        'target' => 'original_price.amount'),
+            ),
+            'stock' => array(
+                array('source' => 'stock_reel',   'target' => 'on_hand_quantity'),
+            ),
+            'order' => array(
+                array('source' => 'ref',          'target' => 'order_item_id'),
+                array('source' => 'line_qty',     'target' => 'quantity'),
+                array('source' => 'line_subprice','target' => 'price.amount'),
+            ),
+        ),
+    ),
+
+    // ── Veepee / Vente-Privée ─────────────────────────────────────────────────
+    'veepee' => array(
+        'name'         => 'Veepee (Vente-Privée)',
+        'enabled'      => 0,
+        'auth_type'    => 'apikey',
+        'api_key'      => '',
+        'shop_id'      => '',
+        'endpoints'    => array(
+            'api'  => 'https://ws.veepee.com/api/v2',
+        ),
+        'mappings' => array(
+            'product' => array(
+                array('source' => 'ref',          'target' => 'brandReference'),
+                array('source' => 'label',        'target' => 'label'),
+                array('source' => 'description',  'target' => 'description'),
+                array('source' => 'barcode',      'target' => 'barcode'),
+                array('source' => 'weight',       'target' => 'netWeight'),
+            ),
+            'price' => array(
+                array('source' => 'price_ttc',    'target' => 'retailPrice'),
+                array('source' => 'price',        'target' => 'purchasePrice'),
+            ),
+            'stock' => array(
+                array('source' => 'stock_reel',   'target' => 'quantity'),
+            ),
+            'order' => array(
+                array('source' => 'ref_client',   'target' => 'orderReference'),
+                array('source' => 'line_qty',     'target' => 'quantity'),
+            ),
+        ),
+    ),
+
+    // ── Showroomprivé ─────────────────────────────────────────────────────────
+    'showroomprive' => array(
+        'name'         => 'Showroomprivé',
+        'enabled'      => 0,
+        'auth_type'    => 'apikey',
+        'api_key'      => '',
+        'endpoints'    => array(
+            'api' => 'https://api.showroomprive.net/v1',
+        ),
+        'mappings' => array(
+            'product' => array(
+                array('source' => 'ref',          'target' => 'reference'),
+                array('source' => 'label',        'target' => 'name'),
+                array('source' => 'description',  'target' => 'description'),
+                array('source' => 'barcode',      'target' => 'ean13'),
+                array('source' => 'weight',       'target' => 'weight'),
+            ),
+            'price' => array(
+                array('source' => 'price_ttc',    'target' => 'public_price'),
+                array('source' => 'price',        'target' => 'purchase_price'),
+            ),
+            'stock' => array(
+                array('source' => 'stock_reel',   'target' => 'stock'),
+            ),
+            'order' => array(
+                array('source' => 'ref_client',   'target' => 'order_id'),
+                array('source' => 'line_qty',     'target' => 'quantity'),
+            ),
+        ),
+    ),
+
 );
 
 // ─── Champs disponibles pour le mapping (par flux) ────────────────────────────
