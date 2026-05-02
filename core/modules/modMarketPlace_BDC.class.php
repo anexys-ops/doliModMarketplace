@@ -99,8 +99,9 @@ class modMarketPlace_BDC extends DolibarrModules
         $this->menu    = array();
 
         // Onglet sur la fiche produit
+        // Format: objecttype:+tabname:Title:langfile@module:permcond:URLrelative
         $this->tabs = array(
-            'product:+marketplaces:Marketplaces:marketplace_bdc@marketplace_bdc:$user->hasRight("marketplace_bdc","marketplace","read"):/custom/marketplace_bdc/marketplace/product_tab.php?id=__ID__',
+            'product:+marketplaces:Marketplaces:marketplace_bdc@marketplace_bdc:1:/custom/marketplace_bdc/marketplace/product_tab.php?id=__ID__',
         );
 
         // Triggers
