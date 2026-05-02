@@ -62,5 +62,9 @@ else
 fi
 
 echo ""
+echo "🔧 Correction des permissions sur le serveur..."
+ssh $SSH_OPTS "$SERVER" "chown -R www-data:www-data $REMOTE_PATH/ 2>/dev/null; chmod -R 755 $REMOTE_PATH/ 2>/dev/null" && echo "  ✓ Permissions OK"
+
+echo ""
 echo "🎉 Déploiement terminé !"
 echo "Check: https://dlbp150r58.edicloud.app/custom/marketplace_bdc/admin/setup.php"
