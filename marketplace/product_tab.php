@@ -20,7 +20,7 @@ if (!$res && file_exists("../../main.inc.php")) { $res = @include "../../main.in
 if (!$res && file_exists("../../../main.inc.php")) { $res = @include "../../../main.inc.php"; }
 if (!$res) { die("Include of main fails"); }
 
-require_once DOL_DOCUMENT_ROOT.'/core/class/product.class.php';
+require_once DOL_DOCUMENT_ROOT.'/product/class/product.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/product.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
 
