@@ -877,12 +877,9 @@ elseif ($tab == 'marketplaces') {
         }
     }
 
-    // ── Bouton + et panneau d'ajout ────────────────────────────────────────
-    print '<hr style="margin:12px 0">';
-    print '<button type="button" onclick="document.getElementById(\'newmkt_panel\').style.display=(document.getElementById(\'newmkt_panel\').style.display==\'none\'?\'block\':\'none\')" class="button button-sm" style="width:100%;font-size:12px;">＋ Ajouter une marketplace</button>';
-    print '<div id="newmkt_panel" style="display:none; margin-top:10px; background:#f9f9f9; border:1px solid #ddd; border-radius:4px; padding:10px;">';
+    // ── Bouton + et liste des présets disponibles ──────────────────────────
+    print '<hr style="margin:10px 0">';
 
-    // Présets disponibles (ceux non encore ajoutés)
     $available_presets = array();
     foreach ($default_marketplaces as $pid => $pdata) {
         if (!isset($db_marketplaces[$pid])) {
@@ -891,30 +888,54 @@ elseif ($tab == 'marketplaces') {
     }
 
     if (!empty($available_presets)) {
-        print '<p style="font-size:12px; font-weight:bold; margin:0 0 6px 0;">Depuis un préset :</p>';
+        print '<button type="button"
+            onclick="var p=document.getElementById(\'preset_list\'); p.style.display=(p.style.display==\'none\'?\'block\':\'none\');"
+            style="width:100%; background:none; border:1px dashed #aaa; border-radius:4px; padding:7px; font-size:12px; color:#555; cursor:pointer; text-align:left;">
+            ＋ Ajouter une marketplace
+        </button>';
+
+        print '<div id="preset_list" style="display:none; margin-top:4px; max-height:280px; overflow-y:auto; border:1px solid #ddd; border-radius:4px; background:#fff;">';
+        foreach ($available_presets as $pid => $pname) {
+            print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?tab=marketplaces" style="margin:0">';
+            print '<input type="hidden" name="token"     value="'.newToken().'">';
+            print '<input type="hidden" name="action"    value="newmkt">';
+            print '<input type="hidden" name="preset_id" value="'.htmlspecialchars($pid).'">';
+            print '<button type="submit"
+                style="width:100%; background:none; border:none; border-bottom:1px solid #f0f0f0; padding:8px 12px; text-align:left; font-size:12px; color:#333; cursor:pointer; display:flex; align-items:center; gap:6px;"
+                onmouseover="this.style.background=\'#f5f5f5\'" onmouseout="this.style.background=\'none\'">
+                <span style="color:#aaa">○</span> '.htmlspecialchars($pname).'
+            </button>';
+            print '</form>';
+        }
+        // Option marketplace personnalisée tout en bas
+        print '<div style="border-top:2px solid #eee; padding:8px;">';
+        print '<p style="font-size:11px; color:#888; margin:0 0 4px 0; font-weight:bold;">PERSONNALISÉE</p>';
         print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?tab=marketplaces">';
         print '<input type="hidden" name="token"  value="'.newToken().'">';
         print '<input type="hidden" name="action" value="newmkt">';
-        print '<select name="preset_id" style="width:100%; margin-bottom:6px; font-size:12px;">';
-        print '<option value="">— Choisir —</option>';
-        foreach ($available_presets as $pid => $pname) {
-            print '<option value="'.htmlspecialchars($pid).'">'.htmlspecialchars($pname).'</option>';
-        }
-        print '</select>';
-        print '<button type="submit" class="button button-primary" style="width:100%; font-size:12px;">Ajouter ce préset</button>';
+        print '<input type="text" name="new_mkt_id"   placeholder="id (ex: monsite)" style="width:100%;margin-bottom:3px;font-size:11px;padding:4px;" required><br>';
+        print '<input type="text" name="new_mkt_name" placeholder="Nom affiché"      style="width:100%;margin-bottom:4px;font-size:11px;padding:4px;" required><br>';
+        print '<button type="submit" style="width:100%;font-size:11px;padding:4px;" class="button">Créer</button>';
         print '</form>';
-        print '<hr style="margin:8px 0">';
+        print '</div>';
+        print '</div>'; // end preset_list
+    } else {
+        // Tous les présets déjà ajoutés : uniquement option personnalisée
+        print '<button type="button"
+            onclick="var p=document.getElementById(\'custom_mkt_form\'); p.style.display=(p.style.display==\'none\'?\'block\':\'none\');"
+            style="width:100%; background:none; border:1px dashed #aaa; border-radius:4px; padding:7px; font-size:12px; color:#555; cursor:pointer;">
+            ＋ Créer une marketplace personnalisée
+        </button>';
+        print '<div id="custom_mkt_form" style="display:none; margin-top:6px; padding:8px; border:1px solid #ddd; border-radius:4px;">';
+        print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?tab=marketplaces">';
+        print '<input type="hidden" name="token"  value="'.newToken().'">';
+        print '<input type="hidden" name="action" value="newmkt">';
+        print '<input type="text" name="new_mkt_id"   placeholder="id (ex: monsite)" style="width:100%;margin-bottom:4px;font-size:12px;" required><br>';
+        print '<input type="text" name="new_mkt_name" placeholder="Nom affiché"      style="width:100%;margin-bottom:4px;font-size:12px;" required><br>';
+        print '<button type="submit" class="button" style="width:100%;font-size:12px;">Créer</button>';
+        print '</form>';
+        print '</div>';
     }
-
-    print '<p style="font-size:12px; font-weight:bold; margin:0 0 6px 0;">Marketplace personnalisée :</p>';
-    print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?tab=marketplaces">';
-    print '<input type="hidden" name="token"  value="'.newToken().'">';
-    print '<input type="hidden" name="action" value="newmkt">';
-    print '<input type="text" name="new_mkt_id"   placeholder="id unique (ex: monsite)"  style="width:100%;margin-bottom:4px;font-size:12px;" required><br>';
-    print '<input type="text" name="new_mkt_name" placeholder="Nom affiché"              style="width:100%;margin-bottom:6px;font-size:12px;" required><br>';
-    print '<button type="submit" class="button" style="width:100%; font-size:12px;">Créer</button>';
-    print '</form>';
-    print '</div>'; // end newmkt_panel
 
     print '</div>'; // end sidebar
 
