@@ -47,7 +47,7 @@ class modMarketPlace_BDC extends DolibarrModules
         $this->description = 'Synchronisation produits, prix, stocks et commandes vers 19 marketplaces (Amazon, Cdiscount, Fnac, ManoMano, TikTok Shop, Zalando…)';
 
         // Version
-        $this->version = '1.4.0';
+        $this->version = '1.5.0';
 
         // Clé dans llx_const
         $this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
