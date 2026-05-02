@@ -223,6 +223,131 @@ if (empty($all_mkt)) {
 <?php } ?>
 </form>
 
+<?php
+// ── Bouton de synchronisation forcée ──────────────────────────────────────────
+if ($user->hasRight('marketplace_bdc', 'marketplace', 'sync')) {
+    // Marketplaces disponibles pour ce produit (activées module + sync produit)
+    $sync_candidates = array();
+    foreach ($all_mkt as $kid => $kinfo) {
+        if (!empty($kinfo['enabled']) && !empty($prod_config[$kid]['synced'])) {
+            $sync_candidates[$kid] = $kinfo['name'] ?? $kid;
+        }
+    }
+    // Toutes activées module (même si pas encore synced sur ce produit)
+    $mkt_enabled_all = array();
+    foreach ($all_mkt as $kid => $kinfo) {
+        if (!empty($kinfo['enabled'])) {
+            $mkt_enabled_all[$kid] = $kinfo['name'] ?? $kid;
+        }
+    }
+?>
+<hr style="margin:24px 0">
+<div style="background:#f0f7ff; border:1px solid #b8d4f0; border-radius:8px; padding:18px 20px;">
+    <h4 style="margin:0 0 14px; font-size:14px; color:#0056b3;">🚀 Synchronisation forcée</h4>
+
+    <?php if (empty($mkt_enabled_all)) { ?>
+        <div class="info">Aucune marketplace activée dans la <a href="<?php echo DOL_URL_ROOT; ?>/custom/marketplace_bdc/admin/setup.php">configuration du module</a>.</div>
+    <?php } else { ?>
+
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <label style="font-size:13px; font-weight:600;">Marketplace :</label>
+            <select id="mkt_sync_target" style="padding:6px 10px; border-radius:4px; border:1px solid #ccc; font-size:13px;">
+                <?php if (!empty($sync_candidates)) { ?>
+                    <option value="all">— Toutes (avec sync activée pour ce produit) —</option>
+                <?php } ?>
+                <?php foreach ($mkt_enabled_all as $kid => $kname) {
+                    $has_sync = !empty($sync_candidates[$kid]);
+                    $label    = $kname.($has_sync ? '' : ' ⚠ sync non activée');
+                    echo '<option value="'.htmlspecialchars($kid).'"'.($has_sync ? '' : ' style="color:#999"').'>'.htmlspecialchars($label).'</option>';
+                } ?>
+            </select>
+
+            <button type="button" class="button button-action" id="btn_force_sync"
+                    onclick="forceSyncProduct(<?php echo $product_id; ?>)"
+                    style="display:flex; align-items:center; gap:6px;">
+                <span id="sync_spinner" style="display:none">⏳</span>
+                <span>⚡ Forcer la synchronisation</span>
+            </button>
+        </div>
+
+        <div id="sync_result_box" style="display:none; margin-top:14px;"></div>
+
+        <p style="margin:12px 0 0; font-size:11px; color:#777;">
+            ℹ️ La synchronisation applique les mappings, les ajustements de prix et le buffer stock configurés ci-dessus.
+            Sauvegardez d'abord la configuration avant de synchroniser.
+        </p>
+    <?php } ?>
+</div>
+
+<script>
+function forceSyncProduct(productId) {
+    var mktId   = document.getElementById('mkt_sync_target').value;
+    var btn     = document.getElementById('btn_force_sync');
+    var spinner = document.getElementById('sync_spinner');
+    var box     = document.getElementById('sync_result_box');
+
+    btn.disabled     = true;
+    spinner.style.display = '';
+    box.style.display = 'none';
+    box.innerHTML     = '';
+
+    fetch('<?php echo DOL_URL_ROOT; ?>/custom/marketplace_bdc/marketplace/sync_product.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'product_id=' + productId + '&mkt_id=' + encodeURIComponent(mktId)
+              + '&token=<?php echo currentToken(); ?>'
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled          = false;
+        spinner.style.display = 'none';
+        box.style.display     = '';
+
+        if (!data.ok && !data.results) {
+            box.innerHTML = '<div style="background:#fde; border:1px solid #f99; border-radius:4px; padding:10px 14px; color:#c00;">❌ ' + escHtml(data.msg) + '</div>';
+            return;
+        }
+
+        var html = '<div style="font-size:12px; color:#555; margin-bottom:8px;">Synchronisé à ' + (data.at || '') + '</div>';
+        html += '<table style="width:100%; border-collapse:collapse; font-size:13px;">';
+        html += '<tr style="background:#e8f4fd;"><th style="padding:6px 10px; text-align:left">Marketplace</th>'
+              + '<th style="padding:6px 10px; text-align:left">Statut</th>'
+              + '<th style="padding:6px 10px; text-align:left">Prix envoyé</th>'
+              + '<th style="padding:6px 10px; text-align:left">Stock envoyé</th></tr>';
+
+        for (var id in data.results) {
+            var r   = data.results[id];
+            var ico = r.ok ? '✅' : '❌';
+            var bg  = r.ok ? '#f0fff4' : '#fff0f0';
+            html += '<tr style="background:' + bg + ';">'
+                  + '<td style="padding:6px 10px;"><strong>' + escHtml(r.name) + '</strong></td>'
+                  + '<td style="padding:6px 10px;">' + ico + ' ' + escHtml(r.msg) + '</td>'
+                  + '<td style="padding:6px 10px;">' + (r.price ? r.price.toFixed(2) + ' € TTC' : '—') + '</td>'
+                  + '<td style="padding:6px 10px;">' + (r.stock !== undefined ? r.stock + ' unités' : '—') + '</td>'
+                  + '</tr>';
+        }
+        html += '</table>';
+
+        box.innerHTML = html;
+
+        // Recharger la page après 3s pour mettre à jour les badges "dernière sync"
+        setTimeout(function() { location.reload(); }, 3000);
+    })
+    .catch(function(err) {
+        btn.disabled          = false;
+        spinner.style.display = 'none';
+        box.style.display     = '';
+        box.innerHTML = '<div style="background:#fde; border:1px solid #f99; border-radius:4px; padding:10px 14px; color:#c00;">❌ Erreur réseau : ' + escHtml(err.toString()) + '</div>';
+    });
+}
+
+function escHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+<?php } ?>
+
 <script>
 function toggleMktPanel(mkt_id, enabled) {
     var body = document.getElementById('body_' + mkt_id);
