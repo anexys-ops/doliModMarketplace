@@ -1,409 +1,597 @@
 <?php
 /**
  * Setup Page - MarketPlace_BDC Module Configuration
- * 
+ *
  * @package     marketplace_bdc
  * @subpackage  admin
- * @author      BDC
- * @version     1.2.0
  */
 
-// Load Dolibarr environment properly
+// Load Dolibarr environment - standard detection pattern
 $res = 0;
-// Try main.inc.php into web root known defined into CONTEXT_DOCUMENT_ROOT (not always defined)
 if (!$res && !empty($_SERVER["CONTEXT_DOCUMENT_ROOT"])) {
     $res = @include $_SERVER["CONTEXT_DOCUMENT_ROOT"]."/main.inc.php";
 }
-// Try main.inc.php into web root detected using web root calculated from SCRIPT_FILENAME
 $tmp = empty($_SERVER['SCRIPT_FILENAME']) ? '' : $_SERVER['SCRIPT_FILENAME'];
 $tmp2 = realpath(__FILE__);
 $i = strlen($tmp) - 1;
 $j = strlen($tmp2) - 1;
-while ($i > 0 && $j > 0 && isset($tmp[$i]) && isset($tmp2[$j]) && $tmp[$i] == $tmp2[$j]) {
-    $i--;
-    $j--;
-}
+while ($i > 0 && $j > 0 && isset($tmp[$i]) && isset($tmp2[$j]) && $tmp[$i] == $tmp2[$j]) { $i--; $j--; }
 if (!$res && $i > 0 && file_exists(substr($tmp, 0, ($i + 1))."/main.inc.php")) {
     $res = @include substr($tmp, 0, ($i + 1))."/main.inc.php";
 }
 if (!$res && $i > 0 && file_exists(dirname(substr($tmp, 0, ($i + 1)))."/main.inc.php")) {
     $res = @include dirname(substr($tmp, 0, ($i + 1)))."/main.inc.php";
 }
-// Try main.inc.php using relative path
-if (!$res && file_exists("../../main.inc.php")) {
-    $res = @include "../../main.inc.php";
-}
-if (!$res && file_exists("../../../main.inc.php")) {
-    $res = @include "../../../main.inc.php";
-}
-if (!$res) {
-    die("Include of main fails");
-}
+if (!$res && file_exists("../../main.inc.php")) { $res = @include "../../main.inc.php"; }
+if (!$res && file_exists("../../../main.inc.php")) { $res = @include "../../../main.inc.php"; }
+if (!$res) { die("Include of main fails"); }
 
-// Protect against direct access
-if (!isset($conf) || !isset($user)) {
-    header("Location: ../index.php");
-    exit;
-}
-
-require_once DOL_DOCUMENT_ROOT . '/core/lib/admin.lib.php';
-require_once DOL_DOCUMENT_ROOT . '/core/class/html.form.class.php';
+require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
+require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
 
 $langs->loadLangs(array('admin', 'marketplace_bdc@marketplace_bdc'));
 
-// Check permission
-if (!$user->admin) {
-    accessforbidden();
-}
+if (!$user->admin) { accessforbidden(); }
 
-// Get action
-$action = GETPOST('action', 'alpha');
-$tab = GETPOST('tab', 'alpha') ?: 'general';
+// ─── Paramètres URL ──────────────────────────────────────────────────────────
+$action     = GETPOST('action', 'aZ09');
+$tab        = GETPOST('tab', 'alpha') ?: 'general';
+$mkt_id     = GETPOST('mkt', 'alpha');   // marketplace sélectionnée
 
-// Predefined test endpoints
-$test_endpoints = array(
+// ─── Structure par défaut des marketplaces ───────────────────────────────────
+$default_marketplaces = array(
     'cdiscount' => array(
-        'name' => 'Cdiscount',
-        'url' => 'https://api.cdiscount.com/api/1.0',
-        'type' => 'REST',
-        'auth_url' => 'https://api.cdiscount.com/api/1.0/auth/GenerateToken',
-        'client_id' => 'LuxGreenApiCdiscount',
-        'client_secret' => 'YlXszv0hpB86bwZSXkyHYvL7RX3s0fIa'
+        'name'        => 'Cdiscount',
+        'enabled'     => 0,
+        'auth_type'   => 'oauth2',
+        'client_id'   => 'LuxGreenApiCdiscount',
+        'client_secret' => 'YlXszv0hpB86bwZSXkyHYvL7RX3s0fIa',
+        'endpoints'   => array(
+            'api'  => 'https://api.cdiscount.com/api/1.0',
+            'auth' => 'https://api.cdiscount.com/api/1.0/auth/GenerateToken',
+        ),
+        'mappings' => array(
+            'product' => array(
+                array('source' => 'ref',           'target' => 'SellerProductId'),
+                array('source' => 'label',         'target' => 'LongLabel'),
+                array('source' => 'description',   'target' => 'Description'),
+                array('source' => 'barcode',       'target' => 'Ean'),
+                array('source' => 'weight',        'target' => 'Weight'),
+            ),
+            'price'   => array(
+                array('source' => 'price_ttc',     'target' => 'Price'),
+                array('source' => 'price',         'target' => 'EcoTax'),
+            ),
+            'stock'   => array(
+                array('source' => 'stock_reel',    'target' => 'StockQuantity'),
+            ),
+            'order'   => array(
+                array('source' => 'ref_client',    'target' => 'CustomerOrderNumber'),
+            ),
+        ),
     ),
-    'mirakl' => array(
-        'name' => 'Mirakl ADEO',
-        'url' => 'https://adeo-marketplace.mirakl.net/api',
-        'type' => 'REST',
-        'auth_type' => 'header',
-        'api_key' => 'd93a0347-3645-41ff-98d0-8837017a1bfa'
+    'mirakl_adeo' => array(
+        'name'      => 'Mirakl ADEO',
+        'enabled'   => 0,
+        'auth_type' => 'apikey',
+        'api_key'   => 'd93a0347-3645-41ff-98d0-8837017a1bfa',
+        'endpoints' => array(
+            'api' => 'https://adeo-marketplace.mirakl.net/api',
+        ),
+        'mappings' => array(
+            'product' => array(
+                array('source' => 'ref',         'target' => 'sku'),
+                array('source' => 'label',       'target' => 'title'),
+                array('source' => 'description', 'target' => 'description'),
+                array('source' => 'barcode',     'target' => 'ean'),
+            ),
+            'price'   => array(
+                array('source' => 'price_ttc',   'target' => 'price'),
+                array('source' => 'tva_tx',      'target' => 'tax_rate'),
+            ),
+            'stock'   => array(
+                array('source' => 'stock_reel',  'target' => 'quantity'),
+            ),
+            'order'   => array(
+                array('source' => 'ref',         'target' => 'order_line_id'),
+            ),
+        ),
     ),
     'amazon' => array(
-        'name' => 'Amazon SP-API (EU)',
-        'url' => 'https://sellingpartnerapi-eu.amazon.com',
-        'type' => 'REST',
-        'auth_type' => 'oauth2',
-        'seller_id' => 'A3EH3LRP5DO8KW',
-        'client_id' => 'amzn1.application-oa2-client.9d11c3172c03474090f53b3f127d8759'
-    )
+        'name'          => 'Amazon SP-API (EU)',
+        'enabled'       => 0,
+        'auth_type'     => 'oauth2_lwa',
+        'seller_id'     => 'A3EH3LRP5DO8KW',
+        'marketplace_id'=> 'A13V1IB3VIYZZH',
+        'client_id'     => 'amzn1.application-oa2-client.9d11c3172c03474090f53b3f127d8759',
+        'client_secret' => '',
+        'refresh_token' => '',
+        'endpoints'     => array(
+            'api'     => 'https://sellingpartnerapi-eu.amazon.com',
+            'auth'    => 'https://api.amazon.com/auth/o2/token',
+            'sandbox' => 'https://sandbox.sellingpartnerapi-eu.amazon.com',
+        ),
+        'mappings' => array(
+            'product' => array(
+                array('source' => 'ref',         'target' => 'sku'),
+                array('source' => 'label',       'target' => 'item_name'),
+                array('source' => 'barcode',     'target' => 'external_product_id'),
+                array('source' => 'description', 'target' => 'product_description'),
+            ),
+            'price'   => array(
+                array('source' => 'price_ttc',   'target' => 'standard_price'),
+                array('source' => 'price',       'target' => 'business_price'),
+            ),
+            'stock'   => array(
+                array('source' => 'stock_reel',  'target' => 'quantity'),
+                array('source' => 'stock_min',   'target' => 'fulfillment_latency'),
+            ),
+            'order'   => array(
+                array('source' => 'ref_client',  'target' => 'buyer_order_id'),
+            ),
+        ),
+    ),
 );
 
-// Test endpoint connection
-$test_result = null;
-if ($action == 'test_endpoint') {
-    $endpoint_id = GETPOST('test_endpoint_id', 'alpha');
-    if (isset($test_endpoints[$endpoint_id])) {
-        $endpoint = $test_endpoints[$endpoint_id];
-        try {
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $endpoint['url']);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            
-            if ($endpoint_id == 'cdiscount' && isset($endpoint['auth_url'])) {
-                curl_setopt($ch, CURLOPT_POST, true);
-                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(array(
-                    'ClientID' => $endpoint['client_id'],
-                    'ClientSecret' => $endpoint['client_secret']
-                )));
-                curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json'));
-            } elseif ($endpoint_id == 'mirakl') {
-                curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-                    'Authorization: ' . $endpoint['api_key']
-                ));
-            }
-            
-            $response = curl_exec($ch);
-            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-            
-            if ($http_code >= 200 && $http_code < 400) {
-                $test_result = array('status' => 'success', 'message' => $langs->trans('ConnectionOK') . ' (HTTP ' . $http_code . ')');
-            } else {
-                $test_result = array('status' => 'error', 'message' => $langs->trans('ConnectionFailed') . ' (HTTP ' . $http_code . ')');
-            }
-        } catch (Exception $e) {
-            $test_result = array('status' => 'error', 'message' => $e->getMessage());
-        }
+// ─── Chargement config en DB ──────────────────────────────────────────────────
+$db_config_raw = isset($conf->global->MARKETPLACE_BDC_MARKETPLACES) ? $conf->global->MARKETPLACE_BDC_MARKETPLACES : '{}';
+$db_marketplaces = json_decode($db_config_raw, true);
+if (!is_array($db_marketplaces)) { $db_marketplaces = array(); }
+
+// Merge defaults avec DB (DB prioritaire)
+$marketplaces = $default_marketplaces;
+foreach ($db_marketplaces as $k => $v) {
+    if (isset($marketplaces[$k])) {
+        $marketplaces[$k] = array_merge($marketplaces[$k], $v);
+    } else {
+        $marketplaces[$k] = $v;
     }
 }
 
-// ACTIONS
+// Paramètres généraux
+$enable_sync    = isset($conf->global->MARKETPLACE_BDC_ENABLE_SYNC)    ? $conf->global->MARKETPLACE_BDC_ENABLE_SYNC    : '0';
+$auto_sync_time = isset($conf->global->MARKETPLACE_BDC_AUTO_SYNC_TIME) ? $conf->global->MARKETPLACE_BDC_AUTO_SYNC_TIME : '3600';
+
+// ─── ACTIONS ─────────────────────────────────────────────────────────────────
+
+// Sauvegarde paramètres généraux
 if ($action == 'savegeneral') {
-    dolibarr_set_const($db, 'MARKETPLACE_BDC_ENABLE_SYNC', GETPOST('enable_sync') ? '1' : '0', 'chaine', 0, '', $conf->entity);
-    dolibarr_set_const($db, 'MARKETPLACE_BDC_AUTO_SYNC_TIME', GETPOST('auto_sync_time', 'int'), 'chaine', 0, '', $conf->entity);
-    setEventMessages($langs->trans('SetupSaved'), null, 'mesgs');
+    dolibarr_set_const($db, 'MARKETPLACE_BDC_ENABLE_SYNC',    GETPOST('enable_sync') ? '1' : '0', 'chaine', 0, '', $conf->entity);
+    dolibarr_set_const($db, 'MARKETPLACE_BDC_AUTO_SYNC_TIME', (int) GETPOST('auto_sync_time'), 'chaine', 0, '', $conf->entity);
+    setEventMessages('Configuration sauvegardée.', null, 'mesgs');
     $tab = 'general';
 }
 
-if ($action == 'newendpoint') {
-    $endpoint_name = GETPOST('endpoint_name', 'alpha');
-    $endpoint_url = GETPOST('endpoint_url', 'string');
-    $endpoint_type = GETPOST('endpoint_type', 'alpha');
-    
-    if ($endpoint_name && $endpoint_url) {
-        $endpoints = json_decode($conf->global->MARKETPLACE_BDC_ENDPOINTS ?? '{}', true);
-        $endpoints[$endpoint_name] = array(
-            'url' => $endpoint_url,
-            'type' => $endpoint_type,
-            'created' => date('Y-m-d H:i:s')
-        );
-        dolibarr_set_const($db, 'MARKETPLACE_BDC_ENDPOINTS', json_encode($endpoints), 'chaine', 0, '', $conf->entity);
-        setEventMessages($langs->trans('EndpointAdded'), null, 'mesgs');
+// Sauvegarde config d'une marketplace
+if ($action == 'storemkt' && $mkt_id) {
+    if (!isset($db_marketplaces[$mkt_id])) { $db_marketplaces[$mkt_id] = array(); }
+    $db_marketplaces[$mkt_id]['name']          = GETPOST('mkt_name', 'string');
+    $db_marketplaces[$mkt_id]['enabled']       = GETPOST('mkt_enabled') ? 1 : 0;
+    $db_marketplaces[$mkt_id]['auth_type']     = GETPOST('mkt_auth_type', 'alpha');
+    $db_marketplaces[$mkt_id]['client_id']     = GETPOST('mkt_client_id', 'string');
+    $db_marketplaces[$mkt_id]['client_secret'] = GETPOST('mkt_client_secret', 'string');
+    $db_marketplaces[$mkt_id]['api_key']       = GETPOST('mkt_api_key', 'string');
+    $db_marketplaces[$mkt_id]['seller_id']     = GETPOST('mkt_seller_id', 'string');
+    $db_marketplaces[$mkt_id]['marketplace_id']= GETPOST('mkt_marketplace_id', 'string');
+    $db_marketplaces[$mkt_id]['refresh_token'] = GETPOST('mkt_refresh_token', 'string');
+
+    // Endpoints
+    $ep_keys  = GETPOST('ep_key',  'array');
+    $ep_urls  = GETPOST('ep_url',  'array');
+    $endpoints_save = array();
+    if (is_array($ep_keys)) {
+        foreach ($ep_keys as $idx => $epk) {
+            $epk = trim($epk);
+            if ($epk !== '' && isset($ep_urls[$idx]) && trim($ep_urls[$idx]) !== '') {
+                $endpoints_save[$epk] = trim($ep_urls[$idx]);
+            }
+        }
     }
-    $tab = 'endpoints';
+    $db_marketplaces[$mkt_id]['endpoints'] = $endpoints_save;
+
+    dolibarr_set_const($db, 'MARKETPLACE_BDC_MARKETPLACES', json_encode($db_marketplaces), 'chaine', 0, '', $conf->entity);
+    setEventMessages('Marketplace sauvegardée.', null, 'mesgs');
+    $tab = 'marketplaces';
 }
 
-if ($action == 'rmendpoint') {
-    $endpoint_id = GETPOST('endpoint_id', 'alpha');
-    $endpoints = json_decode($conf->global->MARKETPLACE_BDC_ENDPOINTS ?? '{}', true);
-    unset($endpoints[$endpoint_id]);
-    dolibarr_set_const($db, 'MARKETPLACE_BDC_ENDPOINTS', json_encode($endpoints), 'chaine', 0, '', $conf->entity);
-    setEventMessages($langs->trans('EndpointDeleted'), null, 'mesgs');
-    $tab = 'endpoints';
-}
-
-if ($action == 'newmapping') {
-    $mapping_name = GETPOST('mapping_name', 'alpha');
-    $mapping_source = GETPOST('mapping_source', 'alpha');
-    $mapping_target = GETPOST('mapping_target', 'alpha');
-    $mapping_type = GETPOST('mapping_type', 'alpha');
-    
-    if ($mapping_name && $mapping_source && $mapping_target) {
-        $mappings = json_decode($conf->global->MARKETPLACE_BDC_MAPPINGS ?? '{}', true);
-        $mappings[$mapping_name] = array(
-            'source' => $mapping_source,
-            'target' => $mapping_target,
-            'type' => $mapping_type,
-            'created' => date('Y-m-d H:i:s')
-        );
-        dolibarr_set_const($db, 'MARKETPLACE_BDC_MAPPINGS', json_encode($mappings), 'chaine', 0, '', $conf->entity);
-        setEventMessages($langs->trans('MappingAdded'), null, 'mesgs');
+// Ajouter un mapping pour un flux
+if ($action == 'newfield' && $mkt_id) {
+    $flow     = GETPOST('flow',   'alpha');
+    $src      = GETPOST('msrc',  'alpha');
+    $tgt      = GETPOST('mtgt',  'alpha');
+    if ($flow && $src && $tgt) {
+        if (!isset($db_marketplaces[$mkt_id])) { $db_marketplaces[$mkt_id] = array(); }
+        if (!isset($db_marketplaces[$mkt_id]['mappings'])) { $db_marketplaces[$mkt_id]['mappings'] = array(); }
+        if (!isset($db_marketplaces[$mkt_id]['mappings'][$flow])) { $db_marketplaces[$mkt_id]['mappings'][$flow] = array(); }
+        // Ne pas dupliquer
+        $db_marketplaces[$mkt_id]['mappings'][$flow][] = array('source' => $src, 'target' => $tgt);
+        dolibarr_set_const($db, 'MARKETPLACE_BDC_MARKETPLACES', json_encode($db_marketplaces), 'chaine', 0, '', $conf->entity);
+        setEventMessages('Champ de mapping ajouté.', null, 'mesgs');
     }
-    $tab = 'mappings';
+    $tab = 'marketplaces';
 }
 
-if ($action == 'rmmapping') {
-    $mapping_id = GETPOST('mapping_id', 'alpha');
-    $mappings = json_decode($conf->global->MARKETPLACE_BDC_MAPPINGS ?? '{}', true);
-    unset($mappings[$mapping_id]);
-    dolibarr_set_const($db, 'MARKETPLACE_BDC_MAPPINGS', json_encode($mappings), 'chaine', 0, '', $conf->entity);
-    setEventMessages($langs->trans('MappingDeleted'), null, 'mesgs');
-    $tab = 'mappings';
+// Supprimer un mapping
+if ($action == 'rmfield' && $mkt_id) {
+    $flow = GETPOST('flow',  'alpha');
+    $idx  = (int) GETPOST('fidx', 'int');
+    if ($flow && isset($db_marketplaces[$mkt_id]['mappings'][$flow][$idx])) {
+        array_splice($db_marketplaces[$mkt_id]['mappings'][$flow], $idx, 1);
+        dolibarr_set_const($db, 'MARKETPLACE_BDC_MARKETPLACES', json_encode($db_marketplaces), 'chaine', 0, '', $conf->entity);
+        setEventMessages('Champ supprimé.', null, 'mesgs');
+    }
+    $tab = 'marketplaces';
 }
 
-// Get settings
-$enable_sync = $conf->global->MARKETPLACE_BDC_ENABLE_SYNC ?? '0';
-$auto_sync_time = $conf->global->MARKETPLACE_BDC_AUTO_SYNC_TIME ?? '3600';
-$endpoints = json_decode($conf->global->MARKETPLACE_BDC_ENDPOINTS ?? '{}', true);
-$mappings = json_decode($conf->global->MARKETPLACE_BDC_MAPPINGS ?? '{}', true);
+// Ajouter une nouvelle marketplace personnalisée
+if ($action == 'newmkt') {
+    $new_id   = preg_replace('/[^a-z0-9_]/', '', strtolower(GETPOST('new_mkt_id', 'alpha')));
+    $new_name = GETPOST('new_mkt_name', 'string');
+    if ($new_id && $new_name && !isset($marketplaces[$new_id])) {
+        $db_marketplaces[$new_id] = array(
+            'name'      => $new_name,
+            'enabled'   => 0,
+            'auth_type' => 'apikey',
+            'endpoints' => array('api' => ''),
+            'mappings'  => array('product' => array(), 'price' => array(), 'stock' => array(), 'order' => array()),
+        );
+        dolibarr_set_const($db, 'MARKETPLACE_BDC_MARKETPLACES', json_encode($db_marketplaces), 'chaine', 0, '', $conf->entity);
+        setEventMessages('Marketplace créée.', null, 'mesgs');
+        $mkt_id = $new_id;
+    }
+    $tab = 'marketplaces';
+}
 
-// DISPLAY PAGE
-llxHeader();
+// Supprimer une marketplace personnalisée (pas celles par défaut)
+if ($action == 'rmmkt' && $mkt_id && !isset($default_marketplaces[$mkt_id])) {
+    unset($db_marketplaces[$mkt_id]);
+    dolibarr_set_const($db, 'MARKETPLACE_BDC_MARKETPLACES', json_encode($db_marketplaces), 'chaine', 0, '', $conf->entity);
+    setEventMessages('Marketplace supprimée.', null, 'mesgs');
+    $mkt_id = '';
+    $tab    = 'marketplaces';
+}
+
+// Test connexion
+$test_result = null;
+if ($action == 'testconn' && $mkt_id) {
+    $mkt_cfg = $marketplaces[$mkt_id] ?? array();
+    $url     = isset($mkt_cfg['endpoints']['api']) ? $mkt_cfg['endpoints']['api'] : '';
+    if ($url) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, array(
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 8,
+            CURLOPT_SSL_VERIFYPEER => false,
+        ));
+        if (($mkt_cfg['auth_type'] ?? '') === 'apikey') {
+            curl_setopt($ch, CURLOPT_HTTPHEADER, array('Authorization: '.$mkt_cfg['api_key']));
+        }
+        $resp = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err  = curl_error($ch);
+        curl_close($ch);
+        if ($code > 0) {
+            $test_result = array('ok' => ($code < 400), 'msg' => 'HTTP '.$code.($err ? ' — '.$err : ''));
+        } else {
+            $test_result = array('ok' => false, 'msg' => 'Erreur cURL: '.$err);
+        }
+    } else {
+        $test_result = array('ok' => false, 'msg' => 'Aucun endpoint API configuré.');
+    }
+    $tab = 'marketplaces';
+}
+
+// Recharger après actions
+$db_config_raw   = isset($conf->global->MARKETPLACE_BDC_MARKETPLACES) ? $conf->global->MARKETPLACE_BDC_MARKETPLACES : '{}';
+$db_marketplaces = json_decode($db_config_raw, true);
+if (!is_array($db_marketplaces)) { $db_marketplaces = array(); }
+$marketplaces = $default_marketplaces;
+foreach ($db_marketplaces as $k => $v) {
+    $marketplaces[$k] = isset($marketplaces[$k]) ? array_merge($marketplaces[$k], $v) : $v;
+}
+$enable_sync    = isset($conf->global->MARKETPLACE_BDC_ENABLE_SYNC)    ? $conf->global->MARKETPLACE_BDC_ENABLE_SYNC    : '0';
+$auto_sync_time = isset($conf->global->MARKETPLACE_BDC_AUTO_SYNC_TIME) ? $conf->global->MARKETPLACE_BDC_AUTO_SYNC_TIME : '3600';
+
+// Marketplace active par défaut
+if (!$mkt_id || !isset($marketplaces[$mkt_id])) {
+    reset($marketplaces);
+    $mkt_id = key($marketplaces);
+}
+$mkt = $marketplaces[$mkt_id];
+
+// ─── AFFICHAGE ────────────────────────────────────────────────────────────────
+llxHeader('', 'Configuration Marketplaces');
 
 $form = new Form($db);
 
-// Title with tabs
-print load_fiche_titre($langs->trans('Setup'), '', 'marketplace_bdc@marketplace_bdc');
+print load_fiche_titre('Module Marketplace BDC — Configuration', '', 'setup');
 
-// Tab navigation
-$tabs = array(
-    'general' => $langs->trans('GeneralSettings'),
-    'endpoints' => $langs->trans('Endpoints'),
-    'mappings' => $langs->trans('Mappings'),
-    'test' => $langs->trans('TestConnections')
+// Tabs principaux
+$head = array(
+    array($_SERVER['PHP_SELF'].'?tab=general',      'Paramètres Généraux', 'general'),
+    array($_SERVER['PHP_SELF'].'?tab=marketplaces', 'Marketplaces',         'marketplaces'),
 );
 
-print '<div class="tabs">';
-foreach ($tabs as $tab_key => $tab_label) {
-    $class = ($tab == $tab_key) ? 'tab-active' : '';
-    print '<a href="?tab=' . $tab_key . '" class="tab ' . $class . '">' . $tab_label . '</a>';
-}
-print '</div>';
-print '<hr>';
+print dol_get_fiche_head($head, $tab, '', -1);
 
-// If TAB 1: GENERAL SETTINGS
+// ════════════════════════════════════════════════════════════════════════════
+// TAB 1 : PARAMÈTRES GÉNÉRAUX
+// ════════════════════════════════════════════════════════════════════════════
 if ($tab == 'general') {
-    print '<form method="POST" action="' . $_SERVER['PHP_SELF'] . '?tab=general">';
-    print '<input type="hidden" name="token" value="' . newToken() . '">';
+    print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?tab=general">';
+    print '<input type="hidden" name="token"  value="'.newToken().'">';
     print '<input type="hidden" name="action" value="savegeneral">';
-    
-    print '<div class="div-table-responsive">';
-    print '<table class="noborder centpercent">';
-    print '<tr class="liste_titre"><th colspan="2">' . $langs->trans('Configuration') . '</th></tr>';
-    
-    // Enable Sync
-    print '<tr><td class="titlefield"><label for="enable_sync">' . $langs->trans('EnableAutoSync') . '</label></td>';
-    print '<td><input type="checkbox" id="enable_sync" name="enable_sync" value="1"' . ($enable_sync ? ' checked' : '') . '> <span class="opacitymedium">' . $langs->trans('EnableAutoSyncDesc') . '</span></td></tr>';
-    
-    // Auto Sync Time
-    print '<tr><td class="titlefield"><label for="auto_sync_time">' . $langs->trans('AutoSyncInterval') . ' (seconds)</label></td>';
-    print '<td><input type="number" id="auto_sync_time" name="auto_sync_time" value="' . htmlspecialchars($auto_sync_time) . '" min="60" max="86400"> <span class="opacitymedium">' . $langs->trans('AutoSyncIntervalDesc') . '</span></td></tr>';
-    
+
+    print '<div class="div-table-responsive"><table class="noborder centpercent">';
+    print '<tr class="liste_titre"><th colspan="3">Synchronisation automatique</th></tr>';
+
+    print '<tr>';
+    print '<td class="titlefield" style="width:300px">Activer la synchronisation automatique</td>';
+    print '<td><input type="checkbox" name="enable_sync" value="1"'.($enable_sync ? ' checked' : '').'>
+           <span class="opacitymedium">Synchronise automatiquement les données vers les marketplaces</span></td>';
+    print '</tr>';
+
+    print '<tr>';
+    print '<td class="titlefield">Intervalle de synchronisation (secondes)</td>';
+    print '<td><input type="number" name="auto_sync_time" value="'.htmlspecialchars($auto_sync_time).'" min="60" max="86400" style="width:120px">
+           <span class="opacitymedium"> (min: 60s — max: 86400s = 24h)</span></td>';
+    print '</tr>';
+
     print '</table></div><br>';
-    print '<div class="center"><input type="submit" class="button button-primary" value="' . $langs->trans('Save') . '"></div>';
+    print '<div class="center"><input type="submit" class="button button-primary" value="Sauvegarder"></div>';
     print '</form>';
 }
 
-// TAB 2: ENDPOINTS
-elseif ($tab == 'endpoints') {
-    // Add Endpoint Form
-    print '<div class="form-group" style="margin-bottom: 20px;">';
-    print '<h3>' . $langs->trans('AddEndpoint') . '</h3>';
-    print '<form method="POST" action="' . $_SERVER['PHP_SELF'] . '?tab=endpoints" style="margin-top: 10px;">';
-    print '<input type="hidden" name="token" value="' . newToken() . '">';
-    print '<input type="hidden" name="action" value="newendpoint">';
-    
-    print '<div class="div-table-responsive"><table class="noborder">';
-    print '<tr>';
-    print '<td><input type="text" name="endpoint_name" placeholder="' . $langs->trans('EndpointName') . '" required></td>';
-    print '<td><input type="url" name="endpoint_url" placeholder="https://api.example.com" required></td>';
-    print '<td><select name="endpoint_type"><option value="REST">REST</option><option value="SOAP">SOAP</option><option value="GraphQL">GraphQL</option></select></td>';
-    print '<td><input type="submit" class="button" value="' . $langs->trans('Add') . '"></td>';
-    print '</tr></table></div>';
-    print '</form></div>';
-    
-    // List Endpoints
-    if (!empty($endpoints)) {
-        print '<h3>' . $langs->trans('ConfiguredEndpoints') . '</h3>';
-        print '<div class="div-table-responsive"><table class="noborder centpercent">';
-        print '<tr class="liste_titre">';
-        print '<th>' . $langs->trans('Name') . '</th>';
-        print '<th>' . $langs->trans('URL') . '</th>';
-        print '<th>' . $langs->trans('Type') . '</th>';
-        print '<th>' . $langs->trans('Created') . '</th>';
-        print '<th>' . $langs->trans('Action') . '</th>';
-        print '</tr>';
-        
-        foreach ($endpoints as $id => $endpoint) {
-            print '<tr><td>' . htmlspecialchars($id) . '</td>';
-            print '<td><code>' . htmlspecialchars($endpoint['url']) . '</code></td>';
-            print '<td>' . htmlspecialchars($endpoint['type']) . '</td>';
-            print '<td>' . $endpoint['created'] . '</td>';
-            print '<td>';
-            print '<a href="?tab=endpoints&action=rmendpoint&endpoint_id=' . urlencode($id) . '" class="button button-delete" onclick="return confirm(\'' . $langs->trans('ConfirmDelete') . '\');">' . $langs->trans('Delete') . '</a>';
-            print '</td></tr>';
-        }
-        print '</table></div>';
-    }
-}
+// ════════════════════════════════════════════════════════════════════════════
+// TAB 2 : MARKETPLACES
+// ════════════════════════════════════════════════════════════════════════════
+elseif ($tab == 'marketplaces') {
 
-// TAB 3: MAPPINGS
-elseif ($tab == 'mappings') {
-    // Add Mapping Form
-    print '<div class="form-group" style="margin-bottom: 20px;">';
-    print '<h3>' . $langs->trans('AddMapping') . '</h3>';
-    print '<form method="POST" action="' . $_SERVER['PHP_SELF'] . '?tab=mappings" style="margin-top: 10px;">';
-    print '<input type="hidden" name="token" value="' . newToken() . '">';
-    print '<input type="hidden" name="action" value="newmapping">';
-    
-    print '<div class="div-table-responsive"><table class="noborder">';
-    print '<tr>';
-    print '<td><input type="text" name="mapping_name" placeholder="' . $langs->trans('MappingName') . '" required></td>';
-    print '<td><select name="mapping_type"><option value="product">Product</option><option value="price">Price</option><option value="stock">Stock</option><option value="order">Order</option></select></td>';
-    print '<td><input type="text" name="mapping_source" placeholder="' . $langs->trans('SourceField') . '" required></td>';
-    print '<td><input type="text" name="mapping_target" placeholder="' . $langs->trans('TargetField') . '" required></td>';
-    print '<td><input type="submit" class="button" value="' . $langs->trans('Add') . '"></td>';
-    print '</tr></table></div>';
-    print '</form></div>';
-    
-    // List Mappings
-    if (!empty($mappings)) {
-        print '<h3>' . $langs->trans('ConfiguredMappings') . '</h3>';
-        print '<div class="div-table-responsive"><table class="noborder centpercent">';
-        print '<tr class="liste_titre">';
-        print '<th>' . $langs->trans('Name') . '</th>';
-        print '<th>' . $langs->trans('Type') . '</th>';
-        print '<th>' . $langs->trans('SourceField') . '</th>';
-        print '<th>' . $langs->trans('TargetField') . '</th>';
-        print '<th>' . $langs->trans('Created') . '</th>';
-        print '<th>' . $langs->trans('Action') . '</th>';
-        print '</tr>';
-        
-        foreach ($mappings as $id => $mapping) {
-            print '<tr><td>' . htmlspecialchars($id) . '</td>';
-            print '<td><span class="badge">' . $mapping['type'] . '</span></td>';
-            print '<td><code>' . htmlspecialchars($mapping['source']) . '</code></td>';
-            print '<td><code>' . htmlspecialchars($mapping['target']) . '</code></td>';
-            print '<td>' . $mapping['created'] . '</td>';
-            print '<td>';
-            print '<a href="?tab=mappings&action=rmmapping&mapping_id=' . urlencode($id) . '" class="button button-delete" onclick="return confirm(\'' . $langs->trans('ConfirmDelete') . '\');">' . $langs->trans('Delete') . '</a>';
-            print '</td></tr>';
-        }
-        print '</table></div>';
-    }
-}
+    print '<div style="display:flex; gap:24px; align-items:flex-start;">';
 
-// TAB 4: TEST CONNECTIONS
-elseif ($tab == 'test') {
-    print '<h3>' . $langs->trans('TestConnections') . '</h3>';
-    
+    // ── Sidebar sélecteur ──────────────────────────────────────────────────
+    print '<div style="min-width:200px; border-right:1px solid #ddd; padding-right:16px;">';
+    print '<p style="font-weight:bold; margin-bottom:8px; font-size:13px; color:#555;">MARKETPLACES</p>';
+    foreach ($marketplaces as $kid => $kmkt) {
+        $active    = ($kid === $mkt_id) ? 'background:#e8f4fd; border-left:3px solid #0069d9; font-weight:bold;' : '';
+        $enabled   = ($kmkt['enabled'] ?? 0) ? '🟢' : '🔴';
+        $is_custom = !isset($default_marketplaces[$kid]);
+        print '<a href="'.$_SERVER['PHP_SELF'].'?tab=marketplaces&mkt='.urlencode($kid).'"
+                  style="display:block; padding:8px 12px; margin-bottom:4px; text-decoration:none; color:#333; border-radius:4px; '.$active.'">';
+        print $enabled.' '.htmlspecialchars($kmkt['name']);
+        if ($is_custom) { print ' <small style="color:#999">[custom]</small>'; }
+        print '</a>';
+    }
+    // Ajouter nouvelle marketplace
+    print '<hr style="margin:12px 0">';
+    print '<button type="button" onclick="document.getElementById(\'newmkt_panel\').style.display=\'block\'" class="button button-sm" style="width:100%;font-size:12px">+ Ajouter</button>';
+    print '<div id="newmkt_panel" style="display:none; margin-top:8px;">';
+    print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?tab=marketplaces">';
+    print '<input type="hidden" name="token"  value="'.newToken().'">';
+    print '<input type="hidden" name="action" value="newmkt">';
+    print '<input type="text" name="new_mkt_id"   placeholder="id (ex: leroy)" style="width:100%;margin-bottom:4px" required><br>';
+    print '<input type="text" name="new_mkt_name" placeholder="Nom affiché"   style="width:100%;margin-bottom:4px" required><br>';
+    print '<input type="submit" class="button" value="Créer" style="width:100%">';
+    print '</form></div>';
+    print '</div>'; // end sidebar
+
+    // ── Panel principal de la marketplace sélectionnée ────────────────────
+    print '<div style="flex:1; min-width:0;">';
+
     if ($test_result) {
-        $class = ($test_result['status'] == 'success') ? 'alert-success' : 'alert-danger';
-        print '<div class="' . $class . '" style="padding: 10px; margin-bottom: 20px;">';
-        print $test_result['message'];
-        print '</div>';
+        $c = $test_result['ok'] ? 'ok' : 'error';
+        print '<div class="'.$c.'" style="padding:8px 12px; margin-bottom:12px; border-radius:4px;">'.htmlspecialchars($test_result['msg']).'</div>';
     }
-    
-    print '<h4>Endpoints de Test Disponibles</h4>';
-    print '<div class="div-table-responsive" style="margin-bottom: 20px;">';
-    print '<table class="noborder centpercent">';
-    print '<tr class="liste_titre">';
-    print '<th>Marketplace</th>';
-    print '<th>Endpoint</th>';
-    print '<th>Auth Type</th>';
-    print '<th>Action</th>';
-    print '</tr>';
-    
-    foreach ($test_endpoints as $id => $endpoint) {
-        print '<tr>';
-        print '<td><strong>' . $endpoint['name'] . '</strong></td>';
-        print '<td><code style="font-size: 11px;">' . htmlspecialchars($endpoint['url']) . '</code></td>';
-        print '<td>';
-        if ($id == 'cdiscount') print '<span class="badge">OAuth2</span>';
-        elseif ($id == 'mirakl') print '<span class="badge">API Key</span>';
-        elseif ($id == 'amazon') print '<span class="badge">OAuth2 LWA</span>';
-        print '</td>';
-        print '<td>';
-        print '<form method="POST" style="display: inline;">';
-        print '<input type="hidden" name="token" value="' . newToken() . '">';
-        print '<input type="hidden" name="action" value="test_endpoint">';
-        print '<input type="hidden" name="tab" value="test">';
-        print '<input type="hidden" name="test_endpoint_id" value="' . htmlspecialchars($id) . '">';
-        print '<input type="submit" class="button button-sm" value="Tester">';
-        print '</form>';
-        print '</td>';
-        print '</tr>';
-    }
-    
+
+    // Formulaire principal marketplace
+    print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?tab=marketplaces&mkt='.urlencode($mkt_id).'">';
+    print '<input type="hidden" name="token"  value="'.newToken().'">';
+    print '<input type="hidden" name="action" value="storemkt">';
+    print '<input type="hidden" name="mkt"    value="'.htmlspecialchars($mkt_id).'">';
+
+    // --- Section Informations générales ---
+    print '<table class="noborder centpercent" style="margin-bottom:16px">';
+    print '<tr class="liste_titre"><th colspan="2">'.htmlspecialchars($mkt['name']).' — Informations générales</th></tr>';
+    print '<tr><td class="titlefield" style="width:240px">Nom affiché</td>';
+    print '<td><input type="text" name="mkt_name" value="'.htmlspecialchars($mkt['name']).'" style="width:300px"></td></tr>';
+    print '<tr><td>Activé</td>';
+    print '<td><input type="checkbox" name="mkt_enabled" value="1"'.($mkt['enabled'] ? ' checked' : '').'> <span class="opacitymedium">Activer la synchronisation pour cette marketplace</span></td></tr>';
     print '</table>';
-    print '</div>';
-    
-    // Test Keys Display
-    print '<hr>';
-    print '<h4>Clés de Test Configurées</h4>';
-    print '<div class="div-table-responsive">';
-    print '<table class="noborder centpercent">';
-    print '<tr class="liste_titre"><th>Clé</th><th>Valeur</th><th>Statut</th></tr>';
-    
-    $test_keys = array(
-        'CDISCOUNT_CLIENT_ID' => 'LuxGreenApiCdiscount',
-        'CDISCOUNT_API_BASE' => 'https://api.cdiscount.com/api/1.0',
-        'MIRAKL_API_KEY' => 'd93a0347-3645-41ff-98d0-8837017a1bfa',
-        'MIRAKL_API_BASE' => 'https://adeo-marketplace.mirakl.net/api',
-        'AMAZON_SELLER_ID' => 'A3EH3LRP5DO8KW',
-        'AMAZON_MARKETPLACE_FR' => 'A13V1IB3VIYZZH'
+
+    // --- Section Authentification ---
+    $auth_type = $mkt['auth_type'] ?? 'apikey';
+    print '<table class="noborder centpercent" style="margin-bottom:16px">';
+    print '<tr class="liste_titre"><th colspan="2">Authentification</th></tr>';
+    print '<tr><td class="titlefield">Type d\'authentification</td>';
+    print '<td><select name="mkt_auth_type" onchange="updateAuthFields(this.value)">';
+    foreach (array('apikey' => 'API Key', 'oauth2' => 'OAuth2 (Client Credentials)', 'oauth2_lwa' => 'OAuth2 LWA (Amazon)', 'basic' => 'HTTP Basic') as $v => $l) {
+        print '<option value="'.$v.'"'.($auth_type === $v ? ' selected' : '').'>'.$l.'</option>';
+    }
+    print '</select></td></tr>';
+
+    // Champs auth — affichage conditionnel JS
+    $fields = array(
+        'apikey'     => array('mkt_api_key'       => 'API Key'),
+        'oauth2'     => array('mkt_client_id'     => 'Client ID',     'mkt_client_secret' => 'Client Secret'),
+        'oauth2_lwa' => array('mkt_client_id'     => 'Client ID',     'mkt_client_secret' => 'Client Secret',
+                              'mkt_seller_id'     => 'Seller ID',     'mkt_marketplace_id'=> 'Marketplace ID',
+                              'mkt_refresh_token' => 'Refresh Token'),
+        'basic'      => array('mkt_client_id'     => 'Username',      'mkt_client_secret' => 'Password'),
     );
-    
-    foreach ($test_keys as $key => $value) {
+    $all_auth_fields = array('mkt_api_key', 'mkt_client_id', 'mkt_client_secret', 'mkt_seller_id', 'mkt_marketplace_id', 'mkt_refresh_token');
+    foreach ($all_auth_fields as $fname) {
+        $label_map = array(
+            'mkt_api_key'        => 'API Key',
+            'mkt_client_id'      => 'Client ID / Username',
+            'mkt_client_secret'  => 'Client Secret / Password',
+            'mkt_seller_id'      => 'Seller ID',
+            'mkt_marketplace_id' => 'Marketplace ID',
+            'mkt_refresh_token'  => 'Refresh Token',
+        );
+        $fkey    = str_replace('mkt_', '', $fname);
+        $fval    = htmlspecialchars($mkt[$fkey] ?? '');
+        $is_pass = in_array($fname, array('mkt_client_secret', 'mkt_api_key', 'mkt_refresh_token'));
+        print '<tr class="auth_field auth_field_'.$fname.'" style="display:none"><td class="titlefield">'.$label_map[$fname].'</td>';
+        print '<td><input type="'.($is_pass ? 'password' : 'text').'" name="'.$fname.'" value="'.$fval.'" style="width:420px" autocomplete="new-password"></td></tr>';
+    }
+    print '</table>';
+
+    // --- Section Endpoints ---
+    $cur_endpoints = $mkt['endpoints'] ?? array();
+    print '<table class="noborder centpercent" style="margin-bottom:16px" id="endpoints_table">';
+    print '<tr class="liste_titre">';
+    print '<th>Endpoints</th><th style="width:55%">URL</th><th style="width:80px">Actions</th>';
+    print '</tr>';
+    foreach ($cur_endpoints as $epkey => $epurl) {
         print '<tr>';
-        print '<td><strong>' . htmlspecialchars($key) . '</strong></td>';
-        print '<td><code style="font-size: 11px;">' . htmlspecialchars(substr($value, 0, 50)) . (strlen($value) > 50 ? '...' : '') . '</code></td>';
-        print '<td><span class="badge badge-success">✓</span></td>';
+        print '<td><input type="text" name="ep_key[]" value="'.htmlspecialchars($epkey).'" style="width:120px" placeholder="api / auth / webhook"></td>';
+        print '<td><input type="url"  name="ep_url[]" value="'.htmlspecialchars($epurl).'" style="width:100%" placeholder="https://..."></td>';
+        print '<td><button type="button" onclick="this.closest(\'tr\').remove()" class="button button-danger button-sm">✕</button></td>';
         print '</tr>';
     }
-    
+    print '<tr id="ep_add_row">';
+    print '<td colspan="3"><button type="button" class="button button-sm" onclick="addEndpointRow()">+ Ajouter un endpoint</button></td>';
+    print '</tr>';
     print '</table>';
+
+    // Boutons sauvegarde + test
+    print '<div style="display:flex; gap:12px; margin-bottom:24px;">';
+    print '<input type="submit" class="button button-primary" value="💾 Sauvegarder la configuration">';
     print '</div>';
+    print '</form>';
+
+    // Bouton test connexion séparé (GET)
+    print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?tab=marketplaces&mkt='.urlencode($mkt_id).'" style="display:inline">';
+    print '<input type="hidden" name="token"  value="'.newToken().'">';
+    print '<input type="hidden" name="action" value="testconn">';
+    print '<input type="hidden" name="mkt"    value="'.htmlspecialchars($mkt_id).'">';
+    print '<button type="submit" class="button button-action">🔌 Tester la connexion</button>';
+    print '</form>';
+
+    if (!isset($default_marketplaces[$mkt_id])) {
+        print ' <a href="'.$_SERVER['PHP_SELF'].'?tab=marketplaces&mkt='.urlencode($mkt_id).'&action=rmmkt" class="button button-danger" onclick="return confirm(\'Supprimer cette marketplace ?\')">🗑 Supprimer</a>';
+    }
+
+    // ── Section Mappings par flux ──────────────────────────────────────────
+    print '<hr style="margin:24px 0">';
+    print '<h3 style="margin-bottom:16px">Mappings par flux</h3>';
+
+    $flow_labels = array('product' => '📦 Produit', 'price' => '💶 Prix', 'stock' => '🏭 Stock', 'order' => '🛒 Commande');
+    $cur_flow    = GETPOST('flow', 'alpha') ?: 'product';
+    $all_mappings = array_merge(
+        isset($default_marketplaces[$mkt_id]['mappings']) ? $default_marketplaces[$mkt_id]['mappings'] : array(),
+        isset($db_marketplaces[$mkt_id]['mappings'])      ? $db_marketplaces[$mkt_id]['mappings']      : array()
+    );
+    // Merge par flux
+    $merged_mappings = array();
+    foreach ($flow_labels as $fl => $fl_lbl) {
+        $merged_mappings[$fl] = array();
+        $seen = array();
+        // defaults first
+        if (!empty($default_marketplaces[$mkt_id]['mappings'][$fl])) {
+            foreach ($default_marketplaces[$mkt_id]['mappings'][$fl] as $r) {
+                $key = $r['source'].':'.$r['target'];
+                if (!in_array($key, $seen)) { $merged_mappings[$fl][] = $r; $seen[] = $key; }
+            }
+        }
+        // puis overrides DB
+        if (!empty($db_marketplaces[$mkt_id]['mappings'][$fl])) {
+            foreach ($db_marketplaces[$mkt_id]['mappings'][$fl] as $r) {
+                $key = $r['source'].':'.$r['target'];
+                if (!in_array($key, $seen)) { $merged_mappings[$fl][] = $r; $seen[] = $key; }
+            }
+        }
+    }
+
+    // Onglets flux
+    print '<div style="display:flex; gap:4px; margin-bottom:0; border-bottom:2px solid #ddd;">';
+    foreach ($flow_labels as $fl => $fl_lbl) {
+        $cls = ($cur_flow === $fl) ? 'background:#0069d9;color:#fff;' : 'background:#f5f5f5;color:#333;';
+        print '<a href="'.$_SERVER['PHP_SELF'].'?tab=marketplaces&mkt='.urlencode($mkt_id).'&flow='.$fl.'"
+                  style="padding:8px 18px; text-decoration:none; border-radius:4px 4px 0 0; font-size:13px; '.$cls.'">'.$fl_lbl.'</a>';
+    }
+    print '</div>';
+
+    $flow_rows = $merged_mappings[$cur_flow] ?? array();
+    print '<table class="noborder centpercent" style="margin-top:0;">';
+    print '<tr class="liste_titre">';
+    print '<th>Champ Dolibarr (source)</th><th>Champ Marketplace (cible)</th><th style="width:80px">Action</th>';
+    print '</tr>';
+
+    if (empty($flow_rows)) {
+        print '<tr><td colspan="3" class="opacitymedium" style="padding:12px">Aucun mapping pour ce flux.</td></tr>';
+    } else {
+        foreach ($flow_rows as $idx => $row) {
+            print '<tr>';
+            print '<td><code>'.htmlspecialchars($row['source']).'</code></td>';
+            print '<td><code>'.htmlspecialchars($row['target']).'</code></td>';
+            print '<td>';
+            print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?tab=marketplaces&mkt='.urlencode($mkt_id).'&flow='.$cur_flow.'" style="display:inline">';
+            print '<input type="hidden" name="token"  value="'.newToken().'">';
+            print '<input type="hidden" name="action" value="rmfield">';
+            print '<input type="hidden" name="mkt"    value="'.htmlspecialchars($mkt_id).'">';
+            print '<input type="hidden" name="flow"   value="'.$cur_flow.'">';
+            print '<input type="hidden" name="fidx"   value="'.$idx.'">';
+            print '<button type="submit" class="button button-danger button-sm" onclick="return confirm(\'Supprimer ?\')">✕</button>';
+            print '</form>';
+            print '</td></tr>';
+        }
+    }
+
+    // Formulaire ajout mapping
+    print '<tr style="background:#f9f9f9">';
+    print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?tab=marketplaces&mkt='.urlencode($mkt_id).'&flow='.$cur_flow.'">';
+    print '<input type="hidden" name="token"  value="'.newToken().'">';
+    print '<input type="hidden" name="action" value="newfield">';
+    print '<input type="hidden" name="mkt"    value="'.htmlspecialchars($mkt_id).'">';
+    print '<input type="hidden" name="flow"   value="'.$cur_flow.'">';
+    print '<td><input type="text" name="msrc" placeholder="ex: ref, price_ttc…" style="width:100%" required></td>';
+    print '<td><input type="text" name="mtgt" placeholder="ex: SellerProductId…" style="width:100%" required></td>';
+    print '<td><button type="submit" class="button button-sm">+ Ajouter</button></td>';
+    print '</form>';
+    print '</tr>';
+    print '</table>';
+
+    print '</div>'; // end panel principal
+    print '</div>'; // end flex
 }
+
+print dol_get_fiche_end();
+
+// ─── JS ───────────────────────────────────────────────────────────────────────
+?>
+<script>
+// Affichage dynamique des champs d'auth
+var authFields = {
+    apikey:     ['mkt_api_key'],
+    oauth2:     ['mkt_client_id', 'mkt_client_secret'],
+    oauth2_lwa: ['mkt_client_id', 'mkt_client_secret', 'mkt_seller_id', 'mkt_marketplace_id', 'mkt_refresh_token'],
+    basic:      ['mkt_client_id', 'mkt_client_secret']
+};
+function updateAuthFields(type) {
+    document.querySelectorAll('.auth_field').forEach(function(el) { el.style.display = 'none'; });
+    var show = authFields[type] || [];
+    show.forEach(function(fname) {
+        document.querySelectorAll('.auth_field_' + fname).forEach(function(el) { el.style.display = ''; });
+    });
+}
+// Init au chargement
+document.addEventListener('DOMContentLoaded', function() {
+    var sel = document.querySelector('[name="mkt_auth_type"]');
+    if (sel) updateAuthFields(sel.value);
+});
+
+// Ajout d'une ligne endpoint dynamiquement
+function addEndpointRow() {
+    var table = document.getElementById('endpoints_table');
+    var addRow = document.getElementById('ep_add_row');
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td><input type="text" name="ep_key[]" style="width:120px" placeholder="api / auth / webhook"></td>'
+                 + '<td><input type="url" name="ep_url[]" style="width:100%" placeholder="https://..."></td>'
+                 + '<td><button type="button" onclick="this.closest(\'tr\').remove()" class="button button-danger button-sm">✕</button></td>';
+    table.insertBefore(tr, addRow);
+}
+</script>
+<?php
 
 llxFooter();
